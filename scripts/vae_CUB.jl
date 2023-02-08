@@ -1,27 +1,21 @@
+using Statistics: mean
 using FastAI
 using FastAI.FluxTraining
 using FastAI.Flux
+using FastAI: encodedblock, encodedblockfilled, decodedblockfilled
+import FastAI.Flux.MLUtils: _default_executor
+import FastAI.MLUtils.Transducers: ThreadedEx
 using FastVision
-import FastVision: Gray, SVector, RGB
+import FastVision: RGB
 using FastTimm
-import ChainRulesCore: @ignore_derivatives
-import Metalhead
-import FastAI.Flux.MLUtils._default_executor
-using FastAI.MLUtils.Transducers: ThreadedEx
+using Metalhead
+using PyCall, PyNNTraining
+# ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
-# FastAI.SHOW_BACKEND[] = ShowText();
 DEVICE = gpu
-# some memory utilities
-# torch.cuda.empty_cache()
-# import FastAI.Flux.CUDA
-# CUDA.memory_status()
+BE = ShowText();  # sometimes get segfault by default
 
-# using FastMakie
-# import GLMakie
-
-# using ImageInTerminal
-# notice that we're using 'datasets' not 'datarecipes'
-BE = ShowText();
+#### Prepare dataset and task ######################################
 # path = load(datasets()["CUB_200_2011"])
 path = load(datasets()["mnist_tiny"])
 data = Datasets.loadfolderdata(
@@ -30,14 +24,7 @@ data = Datasets.loadfolderdata(
     loadfn = loadfile,
 )
 # data, blocks = load(datarecipes()["CUB_200_2011"])
-showblock(BE, Image{2}(), getobs(data, 3))
-
-
-
-# Note: logsigma and mu are probably modeled as block "continuous" with some dimension
-
-
-using FastAI: encodedblock, encodedblockfilled, decodedblockfilled
+# showblock(BE, Image{2}(), getobs(data, 3))
 
 function EmbeddingTask(block, enc)
   sample = block
@@ -57,16 +44,12 @@ task = EmbeddingTask(Image{2}(),
                      )
                     )
 
-x = encodesample(task, Training(), getobs(data, 1));
-showencodedsample(BE, task, x)
-
-td = taskdataset(data, task, Training())
 BATCHSIZE=2
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=true, partial=false);
+####################################################################
 
-
-## Define model
+##### Set up VAE ##########
 struct VAE{E, B, D}
   encoder::E
   bridge ::B
@@ -82,9 +65,6 @@ function (vae::VAE)(x)
   return x̄, (; μ, logσ²)
 end
 
-using Random: randn!
-using Statistics: mean
-
 sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
@@ -93,24 +73,27 @@ function ELBO(x, x̄, μ, logσ²)
   kl_divergence = mean(sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1))
   return reconstruction_error + kl_divergence
 end
+########################
 
-SIZE = (64, 64, 3)
-# Din = prod(SIZE)
-# Dhidden = 512
+#### Set up model #########
+# image size is (64, 64)
+Dhidden_efficientnet = 1792
 Dlatent = 64
 
-# encoder =
-#     Chain(
-#         Flux.flatten,
-#         Dense(Din, Dhidden, relu), # backbone
-#         Parallel(
-#             tuple,
-#             Dense(Dhidden, Dlatent), # μ
-#             Dense(Dhidden, Dlatent), # logσ²
-#         ),
-#     ) |> gpu
+# Backbone:
+# here we load the timm model and remove the classification part
+using PyCall, PyNNTraining
+torch, functorch = pyimport("torch"), pyimport("functorch.experimental")
+backbone = load(models()["timm/efficientnetv2_rw_s"], pretrained=true);
+backbone.classifier = torch.nn.Identity()  # 1792 dimensions
+functorch.replace_all_batch_norm_modules_(backbone);
 
-
+bridge = 
+    Parallel(
+        tuple,
+        Dense(Dhidden_efficientnet, Dlatent), # μ
+        Dense(Dhidden_efficientnet, Dlatent), # logσ²
+    ) |> DEVICE
 
 decoder = Chain(Dense(Dlatent, 16*16*32),
                 xs -> reshape(xs, 16, 16, 32, :),
@@ -121,46 +104,26 @@ decoder = Chain(Dense(Dlatent, 16*16*32),
                 Metalhead.basicblock(32, 3),
                ) |> DEVICE
 
-# Run:
-# ENV["PYTHON"] = "/home/romeo/.cache/pypoetry/virtualenvs/intervention-experiments-poetry-CVVio-gT-py3.10/bin/python"
-# ] build PyCall
-# restart julia
-using PyCall, PyNNTraining
-torch = pyimport("torch")
-fct = pyimport("functorch.experimental")
-
-# timm, torch = pyimport("timm"), pyimport("torch")
-# backbone = timm.create_model("resnet18", pretrained=true);
-# backbone.fc = torch.nn.Identity();
-
-effnet = load(models()["timm/efficientnetv2_rw_s"], pretrained=true);
-effnet.classifier = torch.nn.Identity()  # 1792 dimensions
-backbone = effnet;
-# backbone.requires_grad_(false)
-fct.replace_all_batch_norm_modules_(backbone);
-
-Dhidden_effnet = 1792
-bridge = 
-    Parallel(
-        tuple,
-        Dense(Dhidden_effnet, Dlatent), # μ
-        Dense(Dhidden_effnet, Dlatent), # logσ²
-    ) |> DEVICE
-
-model = VAE(backbone, bridge, decoder);
+model = VAE(backbone, bridge, bridge, decoder);
 params = Flux.params(bridge, decoder);
+###########################
 
+#### Use FluxTraining to define how this model is run. #####
 struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
+function FluxTraining.on(
+    ::FluxTraining.StepBegin,
+    ::Union{VAETrainingPhase, VAEValidationPhase},
+    cb::ToDevice,
+    learner,
+  )
+  learner.step.x = cb.movedatafn(learner.step.x)
+end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
   FluxTraining.runstep(learner, phase, (x = batch,)) do handle, state
-    # we "freeze" these weights by not including the parameters
-    # in the optimizer
     gs = gradient(learner.params) do
-      # intermediate   = @ignore_derivatives learner.model.encoder(state.x)
       intermediate   = learner.model.encoder(state.x)
-      # we could also move this in front of the "gradient" call
       μ, logσ²       = learner.model.bridge(intermediate)
       state.z        = sample_latent(μ, logσ²)
       state.x̄        = learner.model.decoder(state.z)
@@ -187,25 +150,15 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
     end
   end
 end
+############################################################
 
-
-
-function FluxTraining.on(
-    ::FluxTraining.StepBegin,
-    ::Union{VAETrainingPhase, VAEValidationPhase},
-    cb::ToDevice,
-    learner,
-  )
-  learner.step.x = cb.movedatafn(learner.step.x)
-end
-
-# learner = Learner(model, ELBO, callbacks=[ToGPU()])
+#### Try to run the training. #######################
 learner = Learner(model, ELBO, callbacks=[ToPyTorch()])
-
-# dataiter = collect(dl)
-fitonecycle!(learner, 5, 0.01; phases=(VAETrainingPhase() => dl,
+# This seems to segfault randomly after a while.
+fitonecycle!(learner, 5, 1e-4; phases=(VAETrainingPhase() => dl,
                                        VAEValidationPhase() => dl_val))
+#####################################################
 
-xs = makebatch(task, data, rand(1:numobs(data), 4)) |> DEVICE
-ypreds, _ = model(xs)
-showoutputbatch(BE, task, cpu(xs), cpu(ypreds))
+# xs = makebatch(task, data, rand(1:numobs(data), 4)) |> DEVICE
+# ypreds, _ = model(xs)
+# showoutputbatch(BE, task, cpu(xs), cpu(ypreds))
