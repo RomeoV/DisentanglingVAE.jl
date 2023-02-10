@@ -3,6 +3,7 @@ import Random: randn!
 using FastAI
 using FastAI.FluxTraining
 using FastAI.Flux
+import FastAI.Flux.Losses: logitbinarycrossentropy
 using FastAI: encodedblock, encodedblockfilled, decodedblockfilled
 
 using FastVision
@@ -40,8 +41,8 @@ end
 # Note: I checked and the imagenet means and stds are roughly applicable.
 task = EmbeddingTask(Image{2}(),
                      (ProjectiveTransforms((64, 64)),
-                      ImagePreprocessing(means = FastVision.IMAGENET_MEANS,
-                                         stds = FastVision.IMAGENET_STDS,
+                      ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
+                                         stds=FastVision.SVector(1., 1., 1.);
                                          C = RGB{Float32},
                                          buffered=false,
                                         ),
@@ -73,10 +74,13 @@ end
 sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
+bernoulli_loss(x, x_rec) = logitbinarycrossentropy(x_rec, x;
+                                                   agg=x->sum(x; dims=[1,2,3]))
 function ELBO(x, x̄, μ, logσ²)
-  reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
-  kl_divergence = mean(sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1))
-  return reconstruction_error + kl_divergence
+  # reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
+  reconstruction_error = bernoulli_loss(x, x̄)
+  kl_divergence = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1)
+  return mean(reconstruction_error) + mean(kl_divergence)
 end
 ########################
 
@@ -203,16 +207,19 @@ end
 ############################################################
 
 #### Try to run the training. #######################
-learner = Learner(model, ELBO,
+opt = Flux.Optimiser(ClipNorm(1), Adam())
+# opt = Flux.Optimiser(Adam())
+learner = Learner(model, ELBO;
+                  optimizer=opt,
                   data=(dl, dl_val),
                   callbacks=[ToGPU(), ProgressPrinter()])
 
 # test one input
 @ignore_derivatives model(getbatch(learner) |> gpu)[1] |> size
-fitonecycle!(learner, 15, 1e-4; phases=(VAETrainingPhase() => dl,
-                                       VAEValidationPhase() => dl_val))
+fitonecycle!(learner, 5, 1e-4; phases=(VAETrainingPhase() => dl,
+                                        VAEValidationPhase() => dl_val))
 #####################################################
 
 xs = makebatch(task, data, rand(1:numobs(data), 4)) |> DEVICE;
 ypreds, _ = model(xs);
-showoutputbatch(BE, task, cpu(xs), cpu(ypreds))
+showoutputbatch(BE, task, cpu(xs), cpu(ypreds) .|> sigmoid)
