@@ -1,30 +1,34 @@
-using Statistics: mean
+import StatsBase: mean
+import Random: randn!
 using FastAI
 using FastAI.FluxTraining
 using FastAI.Flux
 using FastAI: encodedblock, encodedblockfilled, decodedblockfilled
-import FastAI.Flux.MLUtils: _default_executor
-import FastAI.MLUtils.Transducers: ThreadedEx
+
 using FastVision
 import FastVision: RGB
-using FastTimm
 using Metalhead
-using PyCall, PyNNTraining
+# using FastTimm
+# using PyCall, PyNNTraining
+
+import FastAI.Flux.ChainRulesCore: @ignore_derivatives
+import FastAI.Flux.MLUtils: _default_executor
+import FastAI.MLUtils.Transducers: ThreadedEx
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
 DEVICE = gpu
 BE = ShowText();  # sometimes get segfault by default
 
 #### Prepare dataset and task ######################################
-# path = load(datasets()["CUB_200_2011"])
-path = load(datasets()["mnist_tiny"])
+# path = load(datasets()["mnist_tiny"])
+path = load(datasets()["CUB_200_2011"])
 data = Datasets.loadfolderdata(
     path,
     filterfn = FastVision.isimagefile,
     loadfn = loadfile,
 )
 # data, blocks = load(datarecipes()["CUB_200_2011"])
-# showblock(BE, Image{2}(), getobs(data, 3))
+showblock(BE, Image{2}(), getobs(data, rand(1:numobs(data))))
 
 function EmbeddingTask(block, enc)
   sample = block
@@ -44,7 +48,8 @@ task = EmbeddingTask(Image{2}(),
                      )
                     )
 
-BATCHSIZE=2
+# BATCHSIZE=2
+BATCHSIZE=8
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=true, partial=false);
 ####################################################################
@@ -69,7 +74,7 @@ sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
 function ELBO(x, x̄, μ, logσ²)
-  reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=1))
+  reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
   kl_divergence = mean(sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1))
   return reconstruction_error + kl_divergence
 end
@@ -77,34 +82,79 @@ end
 
 #### Set up model #########
 # image size is (64, 64)
-Dhidden_efficientnet = 1792
-Dlatent = 64
+backbone_dim = 512
+latent_dim = 64
 
-# Backbone:
-# here we load the timm model and remove the classification part
-using PyCall, PyNNTraining
-torch, functorch = pyimport("torch"), pyimport("functorch.experimental")
-backbone = load(models()["timm/efficientnetv2_rw_s"], pretrained=true);
-backbone.classifier = torch.nn.Identity()  # 1792 dimensions
-functorch.replace_all_batch_norm_modules_(backbone);
+backbone = Metalhead.ResNet(18; pretrain=true)
+backbone = Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity)) |> DEVICE
 
 bridge = 
-    Parallel(
-        tuple,
-        Dense(Dhidden_efficientnet, Dlatent), # μ
-        Dense(Dhidden_efficientnet, Dlatent), # logσ²
-    ) |> DEVICE
+Chain(Dense(backbone_dim, backbone_dim, leakyrelu),
+      LayerNorm(backbone_dim),
+      Parallel(
+          tuple,
+          # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
+          Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
+                -1*ones(Float32, latent_dim)),  # μ
+          Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
+                -1*ones(Float32, latent_dim)),  # logvar
+         )
+     ) |> DEVICE
 
-decoder = Chain(Dense(Dlatent, 16*16*32),
-                xs -> reshape(xs, 16, 16, 32, :),
-                Metalhead.basicblock(32, 128),
-                PixelShuffle(2),
-                Metalhead.basicblock(32, 128),
-                PixelShuffle(2),
-                Metalhead.basicblock(32, 3),
-               ) |> DEVICE
+ResidualBlock(c) = Parallel(+,
+                            Chain(leakyrelu,
+                                  Conv((3, 3), c=>c, identity; pad=SamePad()), 
+                                  leakyrelu,
+                                  Conv((3, 3), c=>c, identity; pad=SamePad())),
+                            identity)
 
-model = VAE(backbone, bridge, bridge, decoder);
+decoder = Chain(Dense(latent_dim, 4*4*64, leakyrelu),
+                Dense(4*4*64, 4*4*256, identity),
+                xs -> reshape(xs, 4, 4, 256, :),
+                ResidualBlock(256),
+                ResidualBlock(256),
+                Upsample(2),
+                ResidualBlock(256),
+                ResidualBlock(256),
+                Conv((1, 1), 256=>128, identity),
+                ResidualBlock(128),
+                ResidualBlock(128),
+                Upsample(2),
+                ResidualBlock(128),
+                ResidualBlock(128),
+                Conv((1, 1), 128=>64, identity),
+                Upsample(2),
+                ResidualBlock(64),
+                ResidualBlock(64),
+                Upsample(2),
+                leakyrelu,
+                Conv((5, 5), 64=>3; pad=SamePad())) |> DEVICE
+
+
+# decoder = Chain(Dense(latent_dim, 4*4*64,  leakyrelu),
+#                 Dense(4*4*64,     4*4*256, identity),
+#                 xs -> reshape(xs, 4, 4, 256, :),
+#                 Parallel(addrelu,
+#                   basicblock(256, (256, 256)),
+#                   identity),
+#                 Parallel(addrelu,
+#                   basicblock(256, (256, 256)),
+#                   identity),
+#                 PixelShuffle(2),
+#                 Upsample(2),
+#                 Parallel(addrelu,
+#                   basicblock(64, (64, 64)),
+#                   identity),
+#                 Parallel(addrelu,
+#                   basicblock(64, (64, 64)),
+#                   identity),
+#                 PixelShuffle(2),
+#                 Upsample(2),
+#                 Conv((1, 1), 16=>3),
+#                 sigmoid
+#                ) |> DEVICE
+
+model = VAE(backbone, bridge, decoder);
 params = Flux.params(bridge, decoder);
 ###########################
 
@@ -122,8 +172,8 @@ end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
   FluxTraining.runstep(learner, phase, (x = batch,)) do handle, state
-    gs = gradient(learner.params) do
-      intermediate   = learner.model.encoder(state.x)
+    gs = gradient(params) do
+      intermediate   = @ignore_derivatives learner.model.encoder(state.x)
       μ, logσ²       = learner.model.bridge(intermediate)
       state.z        = sample_latent(μ, logσ²)
       state.x̄        = learner.model.decoder(state.z)
@@ -135,7 +185,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
       return state.loss
     end
     handle(FluxTraining.BackwardEnd())
-    Flux.Optimise.update!(learner.optimizer, learner.params, gs)
+    Flux.Optimise.update!(learner.optimizer, params, gs)
   end
 end
 
@@ -153,12 +203,16 @@ end
 ############################################################
 
 #### Try to run the training. #######################
-learner = Learner(model, ELBO, callbacks=[ToPyTorch()])
-# This seems to segfault randomly after a while.
-fitonecycle!(learner, 5, 1e-4; phases=(VAETrainingPhase() => dl,
+learner = Learner(model, ELBO,
+                  data=(dl, dl_val),
+                  callbacks=[ToGPU(), ProgressPrinter()])
+
+# test one input
+@ignore_derivatives model(getbatch(learner) |> gpu)[1] |> size
+fitonecycle!(learner, 15, 1e-4; phases=(VAETrainingPhase() => dl,
                                        VAEValidationPhase() => dl_val))
 #####################################################
 
-# xs = makebatch(task, data, rand(1:numobs(data), 4)) |> DEVICE
-# ypreds, _ = model(xs)
-# showoutputbatch(BE, task, cpu(xs), cpu(ypreds))
+xs = makebatch(task, data, rand(1:numobs(data), 4)) |> DEVICE;
+ypreds, _ = model(xs);
+showoutputbatch(BE, task, cpu(xs), cpu(ypreds))
