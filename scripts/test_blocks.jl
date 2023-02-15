@@ -4,15 +4,13 @@ import FastAI.Flux.Losses: binarycrossentropy
 import FastAI: showencodedsample, showsample
 BE = ShowText();
 
-# we could make these "bounded"
-# ?Bounded
 task = begin
-  # sample = (; img=Image{2}(), v=Vector{Float64})
+  BoundedImgTensor = Bounded{2, ImageTensor{2}}(ImageTensor{2}(3), (32, 32));
   sample = (Image{2}(), Continuous(6))
-  x = (ImageTensor{2}(3))
-  y = (ImageTensor{2}(3), Continuous(6))
-  ŷ = (ImageTensor{2}(3), Continuous(6))
-  encodedsample = (ImageTensor{2}(3), Continuous(6))
+  x = BoundedImgTensor
+  y = (BoundedImgTensor, Continuous(6))
+  ŷ = (BoundedImgTensor, Continuous(6))
+  encodedsample = (BoundedImgTensor, Continuous(6))
   enc = ( ProjectiveTransforms((32, 32)),
 
           ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
@@ -35,6 +33,8 @@ data = mapobs(sample_fn, 1:64);
 x = encodesample(task, Training(), getobs(data, 1))
 showencodedsample(BE, task, x)
 
+model = identity
+
 BATCHSIZE=8;
 dl, _ = taskdataloaders(data, task, BATCHSIZE, pctgval = 0.1);
 learner = Learner(identity, (y_pred, y)->binarycrossentropy(y_pred[2], y[2]),
@@ -42,7 +42,6 @@ learner = Learner(identity, (y_pred, y)->binarycrossentropy(y_pred[2], y[2]),
 fitonecycle!(learner, 1)
 
 xs = makebatch(task, data, rand(1:numobs(data), 4))
-model = identity
 tpl = model(xs);
 showoutputbatch(BE, task, xs, tpl)
 # showoutputbatch(BE, task, cpu(xs), cpu(ypreds) .|> sigmoid)
