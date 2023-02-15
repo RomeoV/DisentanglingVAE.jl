@@ -4,17 +4,6 @@ import FastAI.Flux.Losses: binarycrossentropy
 import FastAI: showencodedsample, showsample
 BE = ShowText();
 
-# task = BlockTask(
-#         ((Image{2}(), Continuous(6)), (Image{2}(), Continuous(6))),
-#         (
-#          ProjectiveTransforms((32, 32)),
-#          ImagePreprocessing(),
-#         ));
-
-# sample = (rand(RGB, 64, 64), rand(6));
-
-# x, y = encodesample(task, Training(), sample);
-
 # we could make these "bounded"
 # ?Bounded
 task = begin
