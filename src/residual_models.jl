@@ -27,20 +27,21 @@ ResidualEncoder(latent_dim; sc=1) = Encoder(
 ResidualDecoder(latent_dim; sc=1) = Chain(
       Dense(latent_dim, 256÷sc, leakyrelu),
       Dense(256÷sc, 1024÷sc, identity),  # identity here because we have relu in ResidualBlock
-      x->reshape(x, 4, 4, 64÷sc, :),
+      x->reshape(x, 4, 4, 64÷sc, :),  # 4x4
       ResidualBlock(64÷sc),
       ResidualBlock(64÷sc),
 
-      Upsample(2, :bilinear),
+      Upsample(2, :bilinear),  # 8x8
       ResidualBlock(64÷sc),
       ResidualBlock(64÷sc),
       Conv((1, 1), 64÷sc=>32÷sc, identity; stride=1),
 
-      Upsample(2, :bilinear),
+      Upsample(2, :bilinear),  # 16x16
       ResidualBlock(32÷sc),
       ResidualBlock(32÷sc),
 
-      Upsample(2, :bilinear),
+      Upsample(2, :bilinear),  # 32x32
       x->leakyrelu.(x),
-      Conv((5, 5), 32÷sc=>3, identity; stride=1),
+      Conv((5, 5), 32÷sc=>3, identity; stride=1, pad=SamePad()),
+      # xs -> xs[3:30, 3:30, :, :]  # 28x28
 )

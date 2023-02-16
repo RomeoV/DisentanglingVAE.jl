@@ -1,15 +1,44 @@
-const X = [(x, y) for x in LinRange(0, 1, 28),
-                      y in LinRange(0, 1, 28)];
+import FixedPointNumbers: N0f8
+import FastVision: RGB
+import ImageCore.ColorTypes: mapc
+
+make_X(dims) = ((x, y) for x in LinRange(0, 1, dims[1]),
+                           y in LinRange(0, 1, dims[2]));
+
+"Ortogonal distance from x_0 to line through x_1->x_2"
 dist_point_to_line((x1, y1)::Tuple, (x2, y2)::Tuple, (x0, y0)::Tuple) = 
          abs((x2-x1)*(y1-y0) - (x1-x0)*(y2-y1)) / sqrt((x2-x1)^2 + (y2-y1)^2)
+
 function draw!(img::Array{T, 3}, Δy::R, α::R, c::Vector{T}) where T<:Real where R<:Real
   p1 = (0.5+Δy, 0.5)
   p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
   f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
+  X = make_X(size(img)[2:3])
   Z = f.(X)
 
   img .+= reshape(Z, 1, size(Z)...) .* reshape(c, :, 1, 1)
   clamp!(img, 0., 1.)
+end
+function draw!(img::Matrix{RGB{N0f8}}, Δy::R, α::R, C::RGB{N0f8}) where R<:Real
+  p1 = (0.5+Δy, 0.5)
+  p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
+  f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
+  X = make_X(size(img))
+  Z = f.(X)
+  img_ = mapc.(x->clamp(x, 0., 1.),
+               float(img) + Z.*float(C))
+  img .= convert.(RGB{N0f8}, img_)
+end
+function draw(dims::Tuple{Int, Int}, Δy::R, α::R, C::RGB{N0f8}) where R<:Real
+  img = zeros(RGB{N0f8}, dims...)
+  p1 = (0.5+Δy, 0.5)
+  p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
+  f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
+  X = make_X(size(img))
+  Z = f.(X)
+  img_ = mapc.(x->clamp(x, 0., 1.),
+               float(img) + Z.*float(C))
+  img .= convert.(RGB{N0f8}, img_)
 end
 
 function draw_labels_on_image_two_ways!((img_lhs, img_rhs)::Tuple,

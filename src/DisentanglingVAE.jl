@@ -4,9 +4,12 @@ using FastAI.Flux
 using Metalhead
 include("line_utils.jl")
 include("model.jl")
+include("residual_models.jl")
 include("task.jl")
+include("callbacks.jl")
 
-export InputBlockTuple, InputBlockTuple_, OutputBlockTuple, OutputBlockTuple_, DisentanglingVAETask
+export DisentanglingVAETask, VAE, ELBO
+export VAETrainingPhase, VAEValidationPhase
 
 greet() = print("Hello World!")
 
