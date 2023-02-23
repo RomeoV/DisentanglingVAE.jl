@@ -4,12 +4,15 @@ authors = ["Romeo Valentin <romeov@stanford.edu>"]
 version = "0.1.0"
 
 [deps]
+BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 EllipsisNotation = "da5c29d0-fa7d-589e-88eb-ea29b0a81949"
 FastAI = "5d0beca9-ade8-49ae-ad0b-a3cf890e669f"
 FastVision = "7bf02486-ff4c-4e73-b158-40c00866b54f"
 FixedPointNumbers = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 FoldsThreads = "9c68100b-dfe1-47cf-94c8-95104e173443"
+GLM = "38e38edf-8417-5370-95a0-9cbb8c7f171a"
 ImageCore = "a09fc81d-aa75-5fe9-8630-4744c3626534"
 MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
 Metalhead = "dbeba491-748d-5e0e-a39e-b530a07fa0cc"
