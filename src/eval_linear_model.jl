@@ -20,7 +20,7 @@ DEVICE = cpu;
 
 # make data
 # line_data = mapobs(DisentanglingVAE.make_data_sample, 1:2^13)
-data_fn(i) = DisentanglingVAE.make_data_sample(Uniform, i)
+data_fn(i) = DisentanglingVAE.make_data_sample(Uniform, i; Dargs=(-0.5, 0.5))
 line_data = mapobs(data_fn, ObsView(1:2^13))
 
 task = DisentanglingVAETask()
@@ -50,12 +50,14 @@ for (img_lhs, v_lhs, img_rhs, v_rhs, ks) in dl
 end
 
 # process df
-y_gt_syms = [Symbol("y_gt_$i") for i in IND]
+y_gt_syms  = [Symbol("y_gt_$i")  for i in IND]
 y_raw_syms = [Symbol("y_raw_$i") for i in IND]
 y_pre_syms = [Symbol("y_pre_$i") for i in IND]
 σ_raw_syms = [Symbol("σ_raw_$i") for i in IND]
 σ_pre_syms = [Symbol("σ_pre_$i") for i in IND]
-data = transform(df, :y_gt=>y_gt_syms, :y_raw=>y_raw_syms, :σ_raw=>σ_raw_syms)
+data = transform(df, :y_gt =>y_gt_syms,
+                     :y_raw=>y_raw_syms,
+                     :σ_raw=>σ_raw_syms)
 
 # transform to uniform by fitting a gaussian on the marginal
 for i in IND
@@ -67,7 +69,7 @@ for i in IND
 end
 
 # train linear model
-model = Dict(
+models = Dict(
              i => lm(Term(y_gt_syms[i]) ~ term(1)+sum(Term.(y_pre_syms)), data)
              for i in IND
             )
