@@ -11,6 +11,7 @@ using DisentanglingVAE: backbone, bridge, ResidualDecoder
 import ChainRulesCore: @ignore_derivatives
 import FastAI.Flux.MLUtils: _default_executor
 import FastAI.MLUtils.Transducers: ThreadedEx
+import BSON
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
@@ -42,9 +43,11 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-FastAI.fitonecycle!(learner, 50, 1e-4;
+FastAI.fitonecycle!(learner, 500, 1e-4;
                     phases=(VAETrainingPhase() => dl,
                             VAEValidationPhase() => dl_val))
+model_cpu = cpu(model)
+@save "models/model2.bson" model_cpu
 #####################################################
 
 xs = FastAI.makebatch(task, data, rand(1:FastAI.numobs(data), 4)) |> DEVICE;
