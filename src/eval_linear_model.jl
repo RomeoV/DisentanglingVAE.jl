@@ -33,38 +33,40 @@ dl, dl_val = taskdataloaders(line_data, task, BATCHSIZE, pctgval=0.1;
 @load "models/model.bson" model_cpu;
 model = model_cpu
 
+IND = 1:6
 df = DataFrame([SVector{6, Float64}[],
                 SVector{6, Float64}[],
-                SVector{6, Float64}[],
-                SVector{6, Float64}[]], [:y_raw, :y_pre, :σ_pre, :y_gt])
+                SVector{6, Float64}[]], [:y_raw, :σ_raw, :y_gt])
 for (img_lhs, v_lhs, img_rhs, v_rhs, ks) in dl
-  for img in [img_lhs, img_rhs]
+  for (img, v) in [(img_lhs, v_lhs), (img_rhs, v_rhs)]
     intermediate = model.encoder(img)
     μ, logσ² = model.bridge(intermediate)
-    distribution_transform(z) = cdf(Normal(0, 1), z)
-    # distribution_transform(z) = identity(z)
-    y_pre = distribution_transform.(μ)
-    σ_pre = inv.(distribution_transform'.(μ)) .* exp.(logσ²/2)
-    #
-    for i in axes(y_pre)[end]
-      push!(df, Dict(:y_raw=>μ[:, i],
-                     :y_pre=>y_pre[:, i],
-                     :σ_pre=>σ_pre[:, i],
-                     :y_gt =>v_lhs[:, i]))
+    for i in axes(μ)[end]
+      push!(df, (; :y_raw=>μ[:, i],
+                   :σ_raw=>exp.(logσ²[:, i]./2),
+                   :y_gt =>v[:, i]))
     end
   end
 end
 
 # process df
-y_gt_syms = [Symbol("y_gt_$i") for i in 1:6]
-y_raw_syms = [Symbol("y_raw_$i") for i in 1:6]
-y_pre_syms = [Symbol("y_pre_$i") for i in 1:6]
-data = transform(df, :y_gt=>y_gt_syms, :y_raw=>y_raw_syms, :y_pre=>y_pre_syms)
+y_gt_syms = [Symbol("y_gt_$i") for i in IND]
+y_raw_syms = [Symbol("y_raw_$i") for i in IND]
+y_pre_syms = [Symbol("y_pre_$i") for i in IND]
+σ_raw_syms = [Symbol("σ_raw_$i") for i in IND]
+σ_pre_syms = [Symbol("σ_pre_$i") for i in IND]
+data = transform(df, :y_gt=>y_gt_syms, :y_raw=>y_raw_syms, :σ_raw=>σ_raw_syms)
 
-
+# transform to uniform by fitting a gaussian on the marginal
+for i in IND
+  D = Distributions.fit_mle(Normal, data[!, y_raw_syms[i]])
+  T(z) = cdf(D, z)  # transform marginal distribution to uniform
+  # T(z) = z
+  data[!, y_pre_syms[i]] = T.(data[!, y_raw_syms[i]])
+  data[!, σ_pre_syms[i]] = inv.(T'.(data[!, y_raw_syms[i]])) .* data[!, σ_raw_syms[i]]
+end
 
 # train linear model
-IND = 1:6
 model = Dict(
              i => lm(Term(y_gt_syms[i]) ~ term(1)+sum(Term.(y_pre_syms)), data)
              for i in IND
