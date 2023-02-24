@@ -4,8 +4,8 @@ import FastAI: Continuous
 import FastVision: RGB
 import FastVision: ImageTensor
 import FixedPointNumbers: N0f8
-using Random: seed!
-import Distributions: Distribution
+using Random: seed!, RandomDevice
+import Distributions: Distribution, Normal
 
 function DisentanglingVAETask()
   BoundedImgTensor(dim) = Bounded{2, ImageTensor{2}}(ImageTensor{2}(3), (dim, dim));
@@ -30,14 +30,14 @@ end
 
 make_data_sample(i::Int) = make_data_sample(Normal, i)
 
-function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0, 1))
+function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.f0))
+  # the ks are sampled truely randomly, i.e. with a device that is not seeded
+  # each concept has a chance of being forced to be "the same"
+  ks = rand(RandomDevice(), 6) .<= 1.5/6
   seed!(i)
-  ks = rand(Bool, 6)
-  std = 1/sqrt(2)
-  bias = 0.1
-  D = DT{Float64}(Dargs...)
-  v_lhs = rand(D, 6)*std .+ bias
-  v_rhs = rand(D, 6)*std .+ bias
+  D = DT(Dargs...)
+  v_lhs = rand(D, 6)
+  v_rhs = rand(D, 6)
   v_rhs[ks] .= v_lhs[ks]
 
   img_lhs = zeros(RGB{N0f8}, 64, 64)
