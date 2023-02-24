@@ -20,7 +20,7 @@ function (vae::VAE)(x::AbstractArray{<:Real, 4})
   μ, logσ² = vae.bridge(intermediate)
   z = sample_latent(μ, logσ²)
   x̄ = vae.decoder(z)
-  return x̄, (; μ, logσ²)
+  return x̄, μ, logσ²
 end
 function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs)::Tuple{<:AbstractArray{<:Real, 4},
                                                         <:AbstractArray{<:Real, 2},
@@ -155,13 +155,8 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
   (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
   FluxTraining.runstep(learner, phase, (; x_lhs=x_lhs, v_lhs=v_lhs, x_rhs=x_rhs, v_rhs=v_rhs, ks=ks)) do handle, state
     @ignore_derivatives begin
-      intermediate   = learner.model.encoder(state.x_lhs)
-      μ, logσ²       = learner.model.bridge(intermediate)
-      state.z        = sample_latent(μ, logσ²)
-      state.x̄        = learner.model.decoder(state.z)
-      state.y        = state.x_lhs
-      state.ŷ        = state.x̄
-      state.loss = learner.lossfn(state.x_lhs, state.x̄, μ, logσ²)
+      state.loss = ( learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...)
+                   + learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...))
     end
   end
 end
