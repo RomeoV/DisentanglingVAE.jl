@@ -1,18 +1,18 @@
 using FastAI, FastVision
+import FixedPointNumbers: N0f8
 import FastVision: RGB, ImageTensor
 import FastAI.Flux.Losses: binarycrossentropy
 import FastAI: showencodedsample, showsample
 BE = ShowText();
 
 task = begin
-  BoundedImgTensor = Bounded{2, ImageTensor{2}}(ImageTensor{2}(3), (32, 32));
+  BoundedImgTensor(dim) = Bounded{2, ImageTensor{2}}(ImageTensor{2}(3), (dim, dim));
   sample = (Image{2}(), Continuous(6))
-  x = BoundedImgTensor
-  y = (BoundedImgTensor, Continuous(6))
-  ŷ = (BoundedImgTensor, Continuous(6))
-  encodedsample = (BoundedImgTensor, Continuous(6))
+  x = BoundedImgTensor(32)
+  y = (BoundedImgTensor(32), Continuous(6))
+  ŷ = (BoundedImgTensor(32), Continuous(6))
+  encodedsample = (BoundedImgTensor(32), Continuous(6))
   enc = ( ProjectiveTransforms((32, 32)),
-
           ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
                              stds=FastVision.SVector(1., 1., 1.);
                              C = RGB{Float32},
@@ -25,8 +25,8 @@ end
 FastAI.testencoding(enc, (Image{2}(), Continuous(6)))
 
 sample_fn(_) = begin
-  # sample = (rand(RGB, 64, 64), rand(6))
-  sample = FastAI.mocksample(task)
+  sample = (rand(RGB{N0f8}, 64, 64), rand(Float64, 6))
+  # sample = FastAI.mocksample(task)
   sample
 end
 data = mapobs(sample_fn, 1:64);
