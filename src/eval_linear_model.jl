@@ -65,16 +65,17 @@ for i in IND
   T(z) = cdf(D, z)  # transform marginal distribution to uniform
   # T(z) = z
   data[!, y_pre_syms[i]] = T.(data[!, y_raw_syms[i]])
-  data[!, σ_pre_syms[i]] = inv.(T'.(data[!, y_raw_syms[i]])) .* data[!, σ_raw_syms[i]]
+  # data[!, σ_pre_syms[i]] = inv.(T'.(data[!, y_raw_syms[i]])) .* data[!, σ_raw_syms[i]]
+  data[!, σ_pre_syms[i]] = T'.(data[!, y_raw_syms[i]]) .* data[!, σ_raw_syms[i]]
 end
 
 # train linear model
-models = Dict(
+lin_models = Dict(
              i => lm(Term(y_gt_syms[i]) ~ term(1)+sum(Term.(y_pre_syms)), data)
              for i in IND
             )
 for i in IND
-  data[!, "y_pred_$i"] = predict(model[i])
+  data[!, "y_pred_$i"] = predict(lin_models[i])
 end
 
 plt = begin
