@@ -7,6 +7,7 @@ include("model.jl")
 include("residual_models.jl")
 include("task.jl")
 include("callbacks.jl")
+include("experiment_utils.jl")
 
 export DisentanglingVAETask, VAE, ELBO
 export VAETrainingPhase, VAEValidationPhase

@@ -1,8 +1,10 @@
 # using Revise
 using DisentanglingVAE
+import DisentanglingVAE: make_experiment_path
 
 using StatsBase: sample, mean
 using FastAI: ObsView, mapobs, taskdataloaders
+using FastAI: TensorBoardBackend, LogMetrics
 using FastAI.Flux: cpu, gpu
 import FastAI
 import FastAI.Flux
@@ -33,12 +35,14 @@ params = Flux.params(model.bridge, model.decoder);
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam())
 # opt = Flux.Optimiser(Adam())
+tb_backend = TensorBoardBackend(make_experiment_path())
 learner = FastAI.Learner(model, ELBO;
                   optimizer=opt,
                   data=(dl, dl_val),
                   callbacks=[FastAI.ToGPU(),
                              FastAI.ProgressPrinter(),
-                             DisentanglingVAE.VisualizationCallback(task, gpu)])
+                             DisentanglingVAE.VisualizationCallback(task, gpu),
+                             LogMetrics(tb_backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
 # test one input
@@ -49,7 +53,7 @@ FastAI.fitonecycle!(learner, 1, 1e-3;
                     phases=(VAETrainingPhase() => dl,
                             VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
-@save "models/model2.bson" model_cpu
+@save joinpath(make_experiment_path(), "model.bson") model_cpu
 #####################################################
 
 xs = FastAI.makebatch(task, data, rand(1:FastAI.numobs(data), 4)) |> DEVICE;
