@@ -48,15 +48,13 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-FastAI.fitonecycle!(learner, 1, 1e-3;
-                    div=10,
-                    divfinal=1e2,
-                    phases=(VAETrainingPhase() => dl,
-                            VAEValidationPhase() => dl_val))
-model_cpu = cpu(model);
-@save joinpath(EXP_PATH, "model.bson") model_cpu
+for epoch in [10, 100, 1000]
+    FastAI.fitonecycle!(learner, epoch, 1e-3;
+                        div=10,
+                        divfinal=1e2,
+                        phases=(VAETrainingPhase() => dl,
+                                VAEValidationPhase() => dl_val))
+    model_cpu = cpu(model);
+    @save joinpath(EXP_PATH, "model_ep_$epoch.bson") model_cpu
+end
 #####################################################
-
-xs = FastAI.makebatch(task, data, rand(1:FastAI.numobs(data), 4)) |> DEVICE;
-ys = model(xs; apply_sigmoid=true);
-FastAI.showoutputbatch(BE, task, cpu.(xs), cpu.(ys))
