@@ -17,6 +17,7 @@ import BSON: @save
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
+EXP_PATH = make_experiment_path()
 
 data = mapobs(DisentanglingVAE.make_data_sample, 1:2^13)
 
@@ -35,7 +36,7 @@ params = Flux.params(model.bridge, model.decoder);
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam())
 # opt = Flux.Optimiser(Adam())
-tb_backend = TensorBoardBackend(make_experiment_path())
+tb_backend = TensorBoardBackend(EXP_PATH)
 learner = FastAI.Learner(model, ELBO;
                   optimizer=opt,
                   data=(dl, dl_val),
@@ -53,7 +54,7 @@ FastAI.fitonecycle!(learner, 1, 1e-3;
                     phases=(VAETrainingPhase() => dl,
                             VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
-@save joinpath(make_experiment_path(), "model.bson") model_cpu
+@save joinpath(EXP_PATH, "model.bson") model_cpu
 #####################################################
 
 xs = FastAI.makebatch(task, data, rand(1:FastAI.numobs(data), 4)) |> DEVICE;
