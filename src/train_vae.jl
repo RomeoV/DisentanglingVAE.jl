@@ -22,7 +22,7 @@ task = DisentanglingVAETask()
 
 BATCHSIZE=128
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
-                             buffer=true, partial=false,
+                             buffer=false, partial=false,
                             );
 
 DEVICE = gpu
