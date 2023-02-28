@@ -4,7 +4,7 @@ import DisentanglingVAE: make_experiment_path
 
 using StatsBase: sample, mean
 using FastAI: ObsView, mapobs, taskdataloaders
-using FastAI: TensorBoardBackend, LogMetrics
+using FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
 using FastAI.Flux: cpu, gpu
 import FastAI
 import FastAI.Flux
@@ -43,7 +43,8 @@ learner = FastAI.Learner(model, ELBO;
                   callbacks=[FastAI.ToGPU(),
                              FastAI.ProgressPrinter(),
                              DisentanglingVAE.VisualizationCallback(task, gpu),
-                             LogMetrics(tb_backend)])
+                             LogMetrics(tb_backend),
+                             LogHyperParams(backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
 # test one input
