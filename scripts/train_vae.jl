@@ -6,6 +6,7 @@ using StatsBase: sample, mean
 using FastAI: ObsView, mapobs, taskdataloaders
 using FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
 using FastAI.Flux: cpu, gpu
+import FastAI.FluxTraining: fit!
 import FastAI
 import FastAI.Flux
 import FastVision: ShowText, RGB
@@ -34,7 +35,7 @@ model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=2), DEVICE);
 params = Flux.params(model.bridge, model.decoder);
 
 #### Try to run the training. #######################
-opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam())
+opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam(3e-4))
 # opt = Flux.Optimiser(Adam())
 tb_backend = TensorBoardBackend(EXP_PATH)
 learner = FastAI.Learner(model, ELBO;
@@ -49,13 +50,7 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-for epoch in [10, 100, 1000]
-    FastAI.fitonecycle!(learner, epoch, 1e-3;
-                        div=10,
-                        divfinal=1e2,
-                        phases=(VAETrainingPhase() => dl,
-                                VAEValidationPhase() => dl_val))
-    model_cpu = cpu(model);
-    @save joinpath(EXP_PATH, "model_ep_$epoch.bson") model_cpu
-end
+fit!(learner, 1000)
+model_cpu = cpu(model);
+@save joinpath(EXP_PATH, "model_ep_$epoch.bson") model_cpu
 #####################################################
