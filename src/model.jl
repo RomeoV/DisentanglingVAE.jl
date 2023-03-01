@@ -1,8 +1,13 @@
 import StatsBase: sample, mean
 import ChainRulesCore: @ignore_derivatives
 import Random: randn!
-import FastAI.Flux.Losses: logitbinarycrossentropy
-import FastAI.Flux.CUDA
+import CUDA
+using Flux
+import Flux: Chain
+import Flux.Losses: logitbinarycrossentropy
+import FluxTraining
+import FastAI: ToDevice, handle
+import Metalhead
 
 ##### Set up VAE ##########
 struct VAE{E, B, D}
@@ -51,6 +56,8 @@ function ELBO(x, x̄, μ, logσ²)
   kl_divergence = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1)
   return mean(reconstruction_error) + mean(kl_divergence)
 end
+# We need this for FluxTraining.fit!
+ELBO((x, x̄, μ, logσ²)::Tuple) = ELBO(x, x̄, μ, logσ²)
 ########################
 
 #### Set up model #########
@@ -58,7 +65,7 @@ end
 backbone_dim = 512
 # latent_dim = 64
 
-backbone() = begin backbone = Metalhead.ResNet(18; pretrain=true)
+backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity))
  end
 
@@ -159,5 +166,12 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
                    + learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...))
     end
   end
+end
+
+function FluxTraining.fit!(learner, nepochs::Int, (trainiter, validiter))
+    for i in 1:nepochs
+        epoch!(learner, VAETrainingPhase(), trainiter)
+        epoch!(learner, VAEValidationPhase(), validiter)
+    end
 end
 ############################################################

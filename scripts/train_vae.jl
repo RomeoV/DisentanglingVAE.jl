@@ -1,19 +1,19 @@
 # using Revise
 using DisentanglingVAE
 import DisentanglingVAE: make_experiment_path
+import DisentanglingVAE: backbone, bridge, ResidualDecoder
 
-using StatsBase: sample, mean
-using FastAI: ObsView, mapobs, taskdataloaders
-using FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
-using FastAI.Flux: cpu, gpu
-import FastAI.FluxTraining: fit!
 import FastAI
-import FastAI.Flux
+import Flux
+import StatsBase: sample, mean
+import FastAI: ObsView, mapobs, taskdataloaders
+import FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
+import Flux: cpu, gpu
+import FluxTraining: fit!
 import FastVision: ShowText, RGB
-using DisentanglingVAE: backbone, bridge, ResidualDecoder
 import ChainRulesCore: @ignore_derivatives
-import FastAI.Flux.MLUtils: _default_executor
-import FastAI.MLUtils.Transducers: ThreadedEx
+import MLUtils: _default_executor
+import MLUtils.Transducers: ThreadedEx
 import BSON: @save
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
@@ -44,13 +44,13 @@ learner = FastAI.Learner(model, ELBO;
                   callbacks=[FastAI.ToGPU(),
                              FastAI.ProgressPrinter(),
                              DisentanglingVAE.VisualizationCallback(task, gpu),
-                             LogMetrics(tb_backend),
-                             LogHyperParams(backend)])
+                             LogMetrics(tb_backend)])
+                             # LogHyperParams(tb_backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-fit!(learner, 1000)
+fit!(learner, 100)
 model_cpu = cpu(model);
 @save joinpath(EXP_PATH, "model_ep_$epoch.bson") model_cpu
 #####################################################
