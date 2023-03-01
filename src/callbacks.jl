@@ -25,7 +25,7 @@ function FluxTraining.on(
 end
 FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 
                                                                       model=FluxTraining.Read(), )
-runafter(::VisualizationCallback) = (Metrics,)
+FluxTraining.runafter(::VisualizationCallback) = (Metrics,)
 
 
 struct LinearModelCallback <: FluxTraining.Callback
@@ -78,6 +78,4 @@ end
 FluxTraining.stateaccess(::LinearModelCallback) = (data=Read(),
                                                    model=Read(),
                                                    cbstate=(metricsepoch=Write(), history=Read()),)
-FluxTraining.resolveconflict(::FluxTraining.Metrics, ::LinearModelCallback) = FluxTraining.NoConflict()
-FluxTraining.resolveconflict(::LinearModelCallback, ::FluxTraining.Metrics) = FluxTraining.NoConflict()
-runafter(::LinearModelCallback) = (VisualizationCallback,)
+FluxTraining.runafter(::LinearModelCallback) = (VisualizationCallback, Metrics, )

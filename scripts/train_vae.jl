@@ -51,7 +51,7 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-nepochs = 100
+nepochs = 3000
 fit!(learner, nepochs)
 model_cpu = cpu(model);
 @save joinpath(EXP_PATH, "model_ep_$nepochs.bson") model_cpu
