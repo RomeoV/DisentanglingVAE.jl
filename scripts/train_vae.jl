@@ -32,7 +32,6 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
 DEVICE = gpu
 # DEVICE = cpu
 model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
-params = Flux.params(model.bridge, model.decoder);
 
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam(3e-4))

@@ -33,7 +33,8 @@ make_data_sample(i::Int) = make_data_sample(Normal, i)
 function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.f0))
   # the ks are sampled truely randomly, i.e. with a device that is not seeded
   # each concept has a chance of being forced to be "the same"
-  ks = rand(RandomDevice(), 6) .<= 1.5/6
+  k = rand(RandomDevice(), 1:6)
+  ks = zeros(Bool, 6); ks[k] = true
   seed!(i)
   D = DT(Dargs...)
   v_lhs = rand(D, 6)

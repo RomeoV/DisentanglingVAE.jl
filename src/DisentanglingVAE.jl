@@ -10,6 +10,7 @@ include("fastai_patches.jl")
 export DisentanglingVAETask, VAE, ELBO
 export VAETrainingPhase, VAEValidationPhase
 export VisualizationCallback, LinearModelCallback
+export ResidualBlock, ResidualEncoder, ResidualDecoder
 
 greet() = print("Hello World!")
 
