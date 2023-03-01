@@ -168,7 +168,7 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
   end
 end
 
-function FluxTraining.fit!(learner, nepochs::Int, (trainiter, validiter))
+function FluxTraining.fit!(learner, nepochs::Int, (trainiter, validiter)::Tuple)
     for i in 1:nepochs
         epoch!(learner, VAETrainingPhase(), trainiter)
         epoch!(learner, VAEValidationPhase(), validiter)

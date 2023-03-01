@@ -44,13 +44,15 @@ learner = FastAI.Learner(model, ELBO;
                   callbacks=[FastAI.ToGPU(),
                              FastAI.ProgressPrinter(),
                              DisentanglingVAE.VisualizationCallback(task, gpu),
+                             DisentanglingVAE.LinearModelCallback(gpu),
                              LogMetrics(tb_backend)])
                              # LogHyperParams(tb_backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-fit!(learner, 100)
+nepochs = 100
+fit!(learner, nepochs)
 model_cpu = cpu(model);
-@save joinpath(EXP_PATH, "model_ep_$epoch.bson") model_cpu
+@save joinpath(EXP_PATH, "model_ep_$nepochs.bson") model_cpu
 #####################################################
