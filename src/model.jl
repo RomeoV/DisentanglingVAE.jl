@@ -76,37 +76,54 @@ Chain(Dense(backbone_dim, backbone_dim, leakyrelu),
           tuple,
           # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
           Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
-                -1*ones(Float32, latent_dim)),  # μ
+                zeros(Float32, latent_dim)),  # μ
           Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
                 -1*ones(Float32, latent_dim)),  # logvar
          )
      )
 
-ResidualBlock(c) = Parallel(+,
-                            Chain(leakyrelu,
-                                  Conv((3, 3), c=>c, identity; pad=SamePad()), 
-                                  leakyrelu,
-                                  Conv((3, 3), c=>c, identity; pad=SamePad())),
-                            identity)
+# ResidualBlock(c) = Parallel(+,
+#                             Chain(leakyrelu,
+#                                   Conv((3, 3), c=>c, identity; pad=SamePad()),
+#                                   leakyrelu,
+#                                   Conv((3, 3), c=>c, identity; pad=SamePad())),
+#                             identity)
+struct ResidualBlock
+  conv_1 :: Conv
+  conv_2 :: Conv
+  λ :: Float32
+end
+ResidualBlock(channels::Int) = ResidualBlock(
+                Conv((3, 3), channels=>channels, identity; pad=SamePad()),
+                Conv((3, 3), channels=>channels, identity; pad=SamePad()),
+                rand(Float32)*1f-2,
+               )
+Flux.@functor ResidualBlock
+function (b::ResidualBlock)(x)
+  z = leakyrelu.(x)
+  z = b.conv_1(z)
+  z = leakyrelu.(z)
+  z = b.conv_2(z)
+  z = b.λ.*z
+  return x+z
+end
 
-decoder() = Chain(Dense(latent_dim, 4*4*64, leakyrelu),
-                Dense(4*4*64, 4*4*256÷2, identity),
-                xs -> reshape(xs, 4, 4, 256÷2, :),
-                ResidualBlock(256÷2),
-                ResidualBlock(256÷2),
+decoder() = Chain(Dense(latent_dim, 4*4*16, leakyrelu),
+                Dense(4*4*16, 4*4*64, identity),
+                xs -> reshape(xs, 4, 4, 64, :),
+                ResidualBlock(64),
+                ResidualBlock(64),
                 Upsample(2),
-                ResidualBlock(256÷2),
-                ResidualBlock(256÷2),
-                Conv((1, 1), 256÷2=>128÷2, identity),
-                ResidualBlock(128÷2),
-                ResidualBlock(128÷2),
+                ResidualBlock(64),
+                ResidualBlock(64),
+                Conv((1, 1), 64=>32, identity),
+                ResidualBlock(32),
+                ResidualBlock(32),
                 Upsample(2),
-                ResidualBlock(128÷2),
-                ResidualBlock(128÷2),
-                Conv((1, 1), 128÷2=>64÷2, identity),
+                Conv((1, 1), 32=>16, identity),
                 Upsample(2),
                 leakyrelu,
-                Conv((5, 5), 64÷2=>3; pad=SamePad()),
+                Conv((5, 5), 16=>3, identity; pad=SamePad(), stride=1),
                 xs -> xs[3:30, 3:30, :, :])
 
 struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
