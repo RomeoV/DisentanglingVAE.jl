@@ -40,6 +40,7 @@ function FluxTraining.on(
     encoder, bridge = learner.model.encoder, learner.model.bridge
 
     # collect data
+    # the final result will be in nobs x npredictors
     predictors = Array{Float64, 2}[];
     labels     = Array{Float64, 2}[];
     for (xs, ys, _, _, _) in learner.data[:validation]
@@ -47,8 +48,8 @@ function FluxTraining.on(
         push!(predictors, μs')
         push!(labels, ys')
     end
-    predictors = let predictors = cat(predictors..., dims=1)
-        [predictors ;; ones(size(predictors)[1])]  # we add a bias here
+    predictors = let predictors = vcat(predictors...)
+        hcat(predictors, ones(size(predictors, 1)))  # we add a bias here
     end
     labels = cat(labels..., dims=1)
 
