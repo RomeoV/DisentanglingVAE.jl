@@ -63,11 +63,11 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 
 #### Set up model #########
 # image size is (64, 64)
-backbone_dim = 512
+backbone_dim = 2048
 # latent_dim = 64
 
 backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
-   Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity))
+   Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu))
  end
 
 bridge(latent_dim) =

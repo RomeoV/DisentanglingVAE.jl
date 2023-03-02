@@ -1,3 +1,4 @@
+import Flux: Chain, Conv, MeanPool, flatten
 # ResidualBlock(c) = Parallel(+,
 #                             Chain(leakyrelu,
 #                                   Conv((3, 3), c=>c, identity; pad=SamePad()),
@@ -24,7 +25,23 @@ function (b::ResidualBlock)(x)
   return x+z
 end
 
-ResidualEncoder(latent_dim; sc=1) = Encoder(
+ResidualEncoder(; sc=1) = Chain(
+                      Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
+                      ResidualBlock(32÷sc),
+                      ResidualBlock(32÷sc),
+                      Conv((1, 1), 32÷sc=>64÷sc, identity; stride=1),
+                      MeanPool((2, 2)),
+                      ResidualBlock(64÷sc),
+                      ResidualBlock(64÷sc),
+                      MeanPool((2, 2)),
+                      ResidualBlock(64÷sc),
+                      ResidualBlock(64÷sc),
+                      Conv((1, 1), 64÷sc=>128÷sc, identity; stride=1),
+                      MeanPool((2, 2)),
+                      flatten,
+                     )
+
+ResidualEncoderWithHead(latent_dim; sc=1) = Encoder(
                 Chain(
                       Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
                       ResidualBlock(32÷sc),
