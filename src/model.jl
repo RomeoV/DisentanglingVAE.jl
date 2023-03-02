@@ -58,6 +58,7 @@ function ELBO(x, x̄, μ, logσ²)
 end
 # We need this for FluxTraining.fit!
 ELBO((x, x̄, μ, logσ²)::Tuple) = ELBO(x, x̄, μ, logσ²)
+reg_l2(params) = sum(x->sum(x.^2), params)
 ########################
 
 #### Set up model #########
@@ -139,8 +140,10 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                             state.x̄_rhs, state.z_rhs)
 
       handle(FluxTraining.LossBegin())
+      current_step = learner.cbstate.history[phase].steps
       state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs)
-                  + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs))
+                  + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs)
+                  + 1f-3*reg_l2(Flux.params(learner.model.decoder)))  # we add some regularization here :)
 
       handle(FluxTraining.BackwardBegin())
       return state.loss
