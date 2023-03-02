@@ -71,14 +71,14 @@ backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
  end
 
 bridge(latent_dim) =
-Chain(Dense(backbone_dim, backbone_dim, leakyrelu),
-      LayerNorm(backbone_dim),
+Chain(Dense(backbone_dim, 128, leakyrelu),
+      LayerNorm(128,
       Parallel(
           tuple,
           # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
-          Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
+          Dense(0.1f0*Flux.glorot_uniform(latent_dim, 128),
                 zeros(Float32, latent_dim)),  # μ
-          Dense(0.1f0*Flux.glorot_uniform(latent_dim, backbone_dim),
+          Dense(0.1f0*Flux.glorot_uniform(latent_dim, 128),
                 -1*ones(Float32, latent_dim)),  # logvar
          )
      )
