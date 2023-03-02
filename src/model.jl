@@ -146,7 +146,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                                    warmup_factor=warmup_factor)
                   + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs;
                                    warmup_factor=warmup_factor)
-                  + 1f-3*reg_l2(Flug.params(learner.model.decoder)))  # we add some regularization here :)
+                  + 1f-3*reg_l2(Flux.params(learner.model.decoder)))  # we add some regularization here :)
 
       handle(FluxTraining.BackwardBegin())
       return state.loss
