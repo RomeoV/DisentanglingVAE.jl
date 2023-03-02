@@ -50,7 +50,7 @@ sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
 
 bernoulli_loss(x, logit_rec) = logitbinarycrossentropy(logit_rec, x;
                                                        agg=x->sum(x; dims=[1,2,3]))
-function ELBO(x, x̄, μ, logσ²; warmup_factor::Float32=1.0)
+function ELBO(x, x̄, μ, logσ²; warmup_factor::Float32=1.f0)
   # reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
   reconstruction_error = bernoulli_loss(x, x̄)
   kl_divergence = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1)
@@ -141,8 +141,11 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
 
       handle(FluxTraining.LossBegin())
       current_step = learner.cbstate.history[phase].steps
-      state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs; warmup_factor=min(current_step / 10_000, 1))
-                  + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs; warmup_factor=min(current_step / 10_000, 1))
+      warmup_factor::Float32 = min(current_step / 10_000, 1)
+      state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs;
+                                   warmup_factor=warmup_factor)
+                  + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs;
+                                   warmup_factor=warmup_factor)
                   + 1f-3*reg_l2(Flug.params(learner.model.decoder)))  # we add some regularization here :)
 
       handle(FluxTraining.BackwardBegin())
