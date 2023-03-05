@@ -72,7 +72,7 @@ backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
 
 bridge(latent_dim) =
 Chain(Dense(backbone_dim, 128, leakyrelu),
-      LayerNorm(128,
+      LayerNorm(128),
       Parallel(
           tuple,
           # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
