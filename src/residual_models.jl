@@ -1,29 +1,42 @@
 import Flux: Chain, Conv, MeanPool, flatten
-# ResidualBlock(c) = Parallel(+,
-#                             Chain(leakyrelu,
-#                                   Conv((3, 3), c=>c, identity; pad=SamePad()),
-#                                   leakyrelu,
-#                                   Conv((3, 3), c=>c, identity; pad=SamePad())),
-#                             identity)
-struct ResidualBlock
-  conv_1 :: Conv
-  conv_2 :: Conv
-  λ :: Float32
+
+struct ScalarGate
+  λ :: AbstractArray{Float32}
 end
-ResidualBlock(channels::Int) = ResidualBlock(
-                Conv((3, 3), channels=>channels, identity; pad=SamePad()),
-                Conv((3, 3), channels=>channels, identity; pad=SamePad()),
-                rand(Float32)*1f-2,
-               )
-Flux.@functor ResidualBlock
-function (b::ResidualBlock)(x)
-  z = leakyrelu.(x)
-  z = b.conv_1(z)
-  z = leakyrelu.(z)
-  z = b.conv_2(z)
-  z = b.λ.*z
-  return x+z
+ScalarGate() = ScalarGate([rand(Float32)]*1f-2)
+Flux.@functor ScalarGate
+function (sgate::ScalarGate)(x)
+    exp(sgate.λ[1])*x
 end
+Flux.trainable(sgate::ScalarGate) = (sgate.λ, )
+
+ResidualBlock(c) = Chain(
+                      Parallel(+,
+                            Chain(leakyrelu,
+                                  Conv((3, 3), c=>c, identity; pad=SamePad()),
+                                  leakyrelu,
+                                  Conv((3, 3), c=>c, identity; pad=SamePad())),
+                            identity),
+                      ScalarGate())
+# struct ResidualBlock
+#   conv_1 :: Conv
+#   conv_2 :: Conv
+#   λ :: Float32
+# end
+# ResidualBlock(channels::Int) = ResidualBlock(
+#                 Conv((3, 3), channels=>channels, identity; pad=SamePad()),
+#                 Conv((3, 3), channels=>channels, identity; pad=SamePad()),
+#                 rand(Float32)*1f-2,
+#                )
+# Flux.@functor ResidualBlock
+# function (b::ResidualBlock)(x)
+#   z = leakyrelu.(x)
+#   z = b.conv_1(z)
+#   z = leakyrelu.(z)
+#   z = b.conv_2(z)
+#   z = b.λ.*z
+#   return x+z
+# end
 
 ResidualEncoder(; sc=1) = Chain(
                       Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
