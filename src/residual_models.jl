@@ -3,10 +3,10 @@ import Flux: Chain, Conv, MeanPool, flatten
 struct ScalarGate
   λ :: AbstractArray{Float32}
 end
-ScalarGate() = ScalarGate([rand(Float32)]*1f-2)
+ScalarGate() = ScalarGate([rand(Float32)]*log(1f-2))
 Flux.@functor ScalarGate
 function (sgate::ScalarGate)(x)
-    exp(sgate.λ[1])*x
+    exp.(sgate.λ).*x
 end
 Flux.trainable(sgate::ScalarGate) = (sgate.λ, )
 
