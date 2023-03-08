@@ -1,60 +1,33 @@
 import Flux: Chain, Conv, MeanPool, flatten
+import Functors: @functor
 
 struct ScalarGate
   λ :: AbstractArray{Float32}
 end
-ScalarGate() = ScalarGate([rand(Float32)]*log(1f-2))
-Flux.@functor ScalarGate
+ScalarGate() = ScalarGate([rand(Float32)]*0f0)
+@functor ScalarGate
 function (sgate::ScalarGate)(x)
-    exp.(sgate.λ).*x
+    sgate.λ .* x
 end
 Flux.trainable(sgate::ScalarGate) = (sgate.λ, )
 
-ResidualBlock(c) = Chain(
-                      Parallel(+,
+ResidualBlock(c) = Parallel(+,
                             Chain(leakyrelu,
                                   Conv((3, 3), c=>c, identity; pad=SamePad()),
                                   leakyrelu,
                                   Conv((3, 3), c=>c, identity; pad=SamePad())),
-                            identity),
-                      ScalarGate())
-# struct ResidualBlock
-#   conv_1 :: Conv
-#   conv_2 :: Conv
-#   λ :: Float32
-# end
-# ResidualBlock(channels::Int) = ResidualBlock(
-#                 Conv((3, 3), channels=>channels, identity; pad=SamePad()),
-#                 Conv((3, 3), channels=>channels, identity; pad=SamePad()),
-#                 rand(Float32)*1f-2,
-#                )
-# Flux.@functor ResidualBlock
-# function (b::ResidualBlock)(x)
-#   z = leakyrelu.(x)
-#   z = b.conv_1(z)
-#   z = leakyrelu.(z)
-#   z = b.conv_2(z)
-#   z = b.λ.*z
-#   return x+z
-# end
+                                  ScalarGate()),
+                            identity)
 
 ResidualEncoder(; sc=1) = Chain(
-                      Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
-                      ResidualBlock(32÷sc),
-                      ResidualBlock(32÷sc),
-                      Conv((1, 1), 32÷sc=>64÷sc, identity; stride=1),
-                      MeanPool((2, 2)),
-                      ResidualBlock(64÷sc),
-                      ResidualBlock(64÷sc),
-                      MeanPool((2, 2)),
-                      ResidualBlock(64÷sc),
-                      ResidualBlock(64÷sc),
-                      Conv((1, 1), 64÷sc=>128÷sc, identity; stride=1),
-                      MeanPool((2, 2)),
-                      flatten,
+                      Conv((5, 5), 3=>32, relu; stride=1, pad=SamePad()),
+                      Conv((1, 1), 32=>64, relu; stride=2),
+                      Conv((1, 1), 64=>64, relu; stride=2),
+                      Conv((1, 1), 64=>128, relu; stride=2),
+                      x->reshape(x, 4*4*128, :),
                      )
 
-ResidualEncoderWithHead(latent_dim; sc=1) = Encoder(
+ResidualEncoderWithHead(latent_dim; sc=1) = Chain(
                 Chain(
                       Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
                       ResidualBlock(32÷sc),
@@ -69,13 +42,14 @@ ResidualEncoderWithHead(latent_dim; sc=1) = Encoder(
                       Conv((1, 1), 64÷sc=>128÷sc, identity; stride=1),
                       MeanPool((2, 2)),
                       Flux.flatten,
-                      Dense(3*3*128÷sc, 128÷sc, leakyrelu),
+                      Dense(4*4*128÷sc, 128÷sc, leakyrelu),
                       LayerNorm(128÷sc),
                      ),
-                # see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
-                Chain(Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim)),),
-                Chain(Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim)),),  # var (always positive)
-               )
+                Parallel(tuple,
+                    # see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
+                    Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim)),
+                    Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim))
+                ))
 
 
 "See ON THE TRANSFER OF DISENTANGLED REPRESENTATIONS IN REALISTIC SETTINGS, Appendix A

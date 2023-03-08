@@ -1,11 +1,12 @@
 # using Revise
 using DisentanglingVAE
 import DisentanglingVAE: make_experiment_path
-import DisentanglingVAE: backbone, bridge, ResidualDecoder
+import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder, ResidualEncoderWithHead
 
 import FastAI
 import Flux
 import StatsBase: sample, mean
+import FastAI: fitonecycle!
 import FastAI: ObsView, mapobs, taskdataloaders
 import FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
 import Flux: cpu, gpu
@@ -30,13 +31,10 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                             );
 
 DEVICE = gpu
-# DEVICE = cpu
-# model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
-model = VAE(ResidualEncoder(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
+model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 
 #### Try to run the training. #######################
-opt = Flux.Optimiser(Flux.ClipNorm(1), Flux.Adam(3e-4))
-# opt = Flux.Optimiser(Adam())
+opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
 tb_backend = TensorBoardBackend(EXP_PATH)
 learner = FastAI.Learner(model, ELBO;
                   optimizer=opt,
@@ -51,8 +49,12 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-nepochs = 3000
-fit!(learner, nepochs)
+nepochs = 30
+# fit!(learner, nepochs)
+fitonecycle!(learner, nepochs;
+             div=100, divfinal=1,
+             phases=(VAETrainingPhase() => dl,
+                     VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
 @save joinpath(EXP_PATH, "model_ep_$nepochs.bson") model_cpu
 #####################################################

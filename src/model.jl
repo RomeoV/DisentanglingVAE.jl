@@ -50,14 +50,18 @@ sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
 
 bernoulli_loss(x, logit_rec) = logitbinarycrossentropy(logit_rec, x;
                                                        agg=x->sum(x; dims=[1,2,3]))
+kl_divergence(μ, logσ²) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) * 0.f0
 function ELBO(x, x̄, μ, logσ²; warmup_factor::Float32=1.f0)
   # reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
   reconstruction_error = bernoulli_loss(x, x̄)
-  kl_divergence = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1)
-  return mean(reconstruction_error) + warmup_factor*mean(kl_divergence)
+  kl_divergence_error = kl_divergence(μ, logσ²)
+  return mean(reconstruction_error) + warmup_factor*mean(kl_divergence_error)
 end
 # We need this for FluxTraining.fit!
-ELBO((x, x̄, μ, logσ²)::Tuple; warmup_factor::Float32=1.f0) = ELBO(x, x̄, μ, logσ²; warmup_factor=warmup_factor)
+ELBO((x, x̄, μ, logσ²)::Tuple; warmup_factor::Float32=1.f0) = ELBO(x, x̄, μ, logσ²;
+                                                                  warmup_factor=warmup_factor)
+ELBO((x̄, μ, logσ²)::Tuple, x; warmup_factor::Float32=1.f0) = ELBO(x, x̄, μ, logσ²;
+                                                                  warmup_factor=warmup_factor)
 reg_l2(params) = sum(x->sum(x.^2), params)
 ########################
 
@@ -66,9 +70,13 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 backbone_dim = 2048
 # latent_dim = 64
 
-backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
+resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu))
  end
+convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=512)
+    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu, Dense(768, backbone_dim), leakyrelu))
+end
+backbone() = resnet_backbone()
 
 bridge(latent_dim) =
 Chain(Dense(backbone_dim, 128, leakyrelu),
