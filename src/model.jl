@@ -70,7 +70,7 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 backbone_dim = 2048
 # latent_dim = 64
 
-resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
+resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=false)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu))
  end
 convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=512)
