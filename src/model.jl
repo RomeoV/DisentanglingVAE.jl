@@ -59,34 +59,38 @@ end
 # We need this for FluxTraining.fit!
 ELBO((x, x̄, μ, logσ²)::Tuple; warmup_factor::Rational=1//1) = ELBO(x, x̄, μ, logσ²;
                                                                    warmup_factor=warmup_factor)
+ELBO((x̄, μ, logσ²)::Tuple, x; warmup_factor::Rational=1//1) = ELBO(x, x̄, μ, logσ²;
+                                                                   warmup_factor=warmup_factor)
 reg_l2(params) = sum(x->sum(x.^2), params)
 ########################
 
 #### Set up model #########
 # image size is (64, 64)
-backbone_dim = 512
+# backbone_dim = 512
+backbone_dim = 128
 # latent_dim = 64
 
 resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=false)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu))
  end
-convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=512)
-    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., leakyrelu, Dense(768, backbone_dim), leakyrelu))
-end
-backbone() = resnet_backbone()
+convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
+# convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=128)
+#     Chain(backbone.layers[1], Chain(backbone.layers[2].layers[[1, 2, 4]]...))
+# end
+backbone() = convnext_backbone()
 
-bridge(latent_dim) =
-Chain(Dense(backbone_dim, 128, leakyrelu),
-      LayerNorm(128),
-      Parallel(
-          tuple,
-          # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
-          Dense(0.1f0*Flux.glorot_uniform(latent_dim, 128),
-                zeros(Float32, latent_dim)),  # μ
-          Dense(0.1f0*Flux.glorot_uniform(latent_dim, 128),
-                -1*ones(Float32, latent_dim)),  # logvar
-         )
-     )
+bridge(latent_dim) = Chain(
+          # Dense(backbone_dim, 128, leakyrelu; bias=false),
+          leakyrelu,
+          LayerNorm(128),
+          Parallel(
+              tuple,
+              Dense(128, latent_dim),
+              # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
+              Dense(1//10*Flux.glorot_uniform(latent_dim, 128),
+                    -1*ones(Float32, latent_dim)),  # logvar
+            )
+        )
 
 
 decoder() = Chain(Dense(latent_dim, 4*4*16, leakyrelu),
