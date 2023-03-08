@@ -16,6 +16,7 @@ import ChainRulesCore: @ignore_derivatives
 import MLUtils: _default_executor
 import MLUtils.Transducers: ThreadedEx
 import BSON: @save
+@info "Starting train_vae.jl script"
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
@@ -31,6 +32,7 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                             );
 
 DEVICE = gpu
+# model = VAE(DisentanglingVAE.resnet_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 
 #### Try to run the training. #######################
@@ -49,10 +51,10 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-nepochs = 30
+nepochs = 3000
 # fit!(learner, nepochs)
 fitonecycle!(learner, nepochs;
-             div=100, divfinal=1,
+             div=100, divfinal=1, pct_start=10//nepochs,
              phases=(VAETrainingPhase() => dl,
                      VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
