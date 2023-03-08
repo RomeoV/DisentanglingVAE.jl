@@ -2,8 +2,8 @@ import StatsBase: sample, mean
 import ChainRulesCore: @ignore_derivatives
 import Random: randn!
 import CUDA
-using Flux
-import Flux: Chain
+import Flux
+import Flux: Dense, Parallel, Chain, LayerNorm, Upsample, SamePad, leakyrelu, gradient
 import Flux.Losses: logitbinarycrossentropy
 import FluxTraining
 import FastAI: ToDevice, handle
@@ -50,18 +50,15 @@ sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
 
 bernoulli_loss(x, logit_rec) = logitbinarycrossentropy(logit_rec, x;
                                                        agg=x->sum(x; dims=[1,2,3]))
-kl_divergence(μ, logσ²) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) * 0.f0
-function ELBO(x, x̄, μ, logσ²; warmup_factor::Float32=1.f0)
-  # reconstruction_error = mean(sum(@. ((x̄ - x)^2); dims=(1,2,3)))
+kl_divergence(μ, logσ²) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1)
+function ELBO(x, x̄, μ, logσ²; warmup_factor::Rational=1//1)
   reconstruction_error = bernoulli_loss(x, x̄)
   kl_divergence_error = kl_divergence(μ, logσ²)
   return mean(reconstruction_error) + warmup_factor*mean(kl_divergence_error)
 end
 # We need this for FluxTraining.fit!
-ELBO((x, x̄, μ, logσ²)::Tuple; warmup_factor::Float32=1.f0) = ELBO(x, x̄, μ, logσ²;
-                                                                  warmup_factor=warmup_factor)
-ELBO((x̄, μ, logσ²)::Tuple, x; warmup_factor::Float32=1.f0) = ELBO(x, x̄, μ, logσ²;
-                                                                  warmup_factor=warmup_factor)
+ELBO((x, x̄, μ, logσ²)::Tuple; warmup_factor::Rational=1//1) = ELBO(x, x̄, μ, logσ²;
+                                                                   warmup_factor=warmup_factor)
 reg_l2(params) = sum(x->sum(x.^2), params)
 ########################
 
@@ -149,9 +146,10 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
       state.ŷ            = (state.x̄_lhs, state.z_lhs,
                             state.x̄_rhs, state.z_rhs)
 
-      handle(FluxTraining.LossBegin())
       current_step = learner.cbstate.history[phase].steps
-      warmup_factor::Float32 = min(current_step / 10_000, 1)
+      warmup_factor::Rational = min(current_step // 10_000, 1//1)
+
+      handle(FluxTraining.LossBegin())
       state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs;
                                    warmup_factor=warmup_factor)
                   + learner.lossfn(state.x_rhs, state.x̄_rhs, μ_rhs, logσ²_rhs;
