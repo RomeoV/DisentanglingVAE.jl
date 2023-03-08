@@ -15,7 +15,7 @@ ResidualBlock(c) = Parallel(+,
                             Chain(leakyrelu,
                                   Conv((3, 3), c=>c, identity; pad=SamePad()),
                                   leakyrelu,
-                                  Conv((3, 3), c=>c, identity; pad=SamePad())),
+                                  Conv((3, 3), c=>c, identity; pad=SamePad()),
                                   ScalarGate()),
                             identity)
 
