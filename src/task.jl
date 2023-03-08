@@ -41,12 +41,12 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.f0))
   v_rhs = rand(D, 6)
   v_rhs[ks] .= v_lhs[ks]
 
-  img_lhs = zeros(RGB{N0f8}, 64, 64)
+  img_lhs = rand(RGB{N0f8}, 64, 64)
   DisentanglingVAE.draw!(img_lhs, v_lhs[1:2]..., RGB{N0f8}(1.,0,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[3:4]..., RGB{N0f8}(0,1.,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[5:6]..., RGB{N0f8}(0,0,1.))
 
-  img_rhs = zeros(RGB{N0f8}, 64, 64)
+  img_rhs = rand(RGB{N0f8}, 64, 64)
   DisentanglingVAE.draw!(img_rhs, v_rhs[1:2]..., RGB{N0f8}(1.,0,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[3:4]..., RGB{N0f8}(0,1.,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{N0f8}(0,0,1.))
