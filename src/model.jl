@@ -68,7 +68,7 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 #### Set up model #########
 # image size is (64, 64)
 # backbone_dim = 512
-backbone_dim = 768
+# backbone_dim = 768
 # latent_dim = 64
 
 resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
@@ -81,7 +81,7 @@ convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny)
 end
 backbone() = convnext_backbone()
 
-bridge(latent_dim) = Chain(
+bridge(backbone_dim, latent_dim) = Chain(
           Dense(backbone_dim, 128, leakyrelu),
           LayerNorm(128),
           Parallel(

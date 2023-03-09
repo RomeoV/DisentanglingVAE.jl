@@ -22,18 +22,18 @@ _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
 EXP_PATH = make_experiment_path()
 
-data = mapobs(DisentanglingVAE.make_data_sample, 1:2^13)
+data = mapobs(DisentanglingVAE.make_data_sample, 1:2^14)
 
 task = DisentanglingVAETask()
 
-BATCHSIZE=32
+BATCHSIZE=128
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=false, partial=false,
                             );
 
 DEVICE = gpu
-model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
-# model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
+# model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
+model = VAE(ResidualEncoder(128), bridge(128, 6), ResidualDecoder(6), DEVICE);
 
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))

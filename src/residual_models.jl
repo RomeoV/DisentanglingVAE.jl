@@ -1,4 +1,4 @@
-import Flux: Chain, Conv, MeanPool, flatten
+import Flux: Chain, Conv, MeanPool, GlobalMeanPool, flatten
 import Functors: @functor
 import Metalhead: convnextblock
 
@@ -20,38 +20,20 @@ ResidualBlock(c) = Parallel(+,
                                   ScalarGate()),
                             identity)
 
-ResidualEncoder(; sc=1) = Chain(
-                      Conv((5, 5), 3=>32, relu; stride=1, pad=SamePad()),
-                      Conv((1, 1), 32=>64, relu; stride=2),
-                      Conv((1, 1), 64=>64, relu; stride=2),
-                      Conv((1, 1), 64=>128, relu; stride=2),
-                      x->reshape(x, 4*4*128, :),
-                     )
-
-ResidualEncoderWithHead(latent_dim; sc=1) = Chain(
-                Chain(
+ResidualEncoder(latent_dim; sc=1) = Chain(
                       Conv((5, 5), 3=>32÷sc, leakyrelu; stride=1, pad=SamePad()),
-                      ResidualBlock(32÷sc),
-                      ResidualBlock(32÷sc),
+                      convnextblock(32÷sc),
+                      convnextblock(32÷sc),
                       Conv((1, 1), 32÷sc=>64÷sc, identity; stride=1),
                       MeanPool((2, 2)),
-                      ResidualBlock(64÷sc),
-                      ResidualBlock(64÷sc),
+                      convnextblock(64÷sc),
+                      convnextblock(64÷sc),
                       MeanPool((2, 2)),
-                      ResidualBlock(64÷sc),
-                      ResidualBlock(64÷sc),
-                      Conv((1, 1), 64÷sc=>128÷sc, identity; stride=1),
-                      MeanPool((2, 2)),
-                      Flux.flatten,
-                      Dense(4*4*128÷sc, 128÷sc, leakyrelu),
-                      LayerNorm(128÷sc),
-                     ),
-                Parallel(tuple,
-                    # see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
-                    Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim)),
-                    Dense(0.1*Flux.glorot_uniform(latent_dim, 128÷sc), -1*ones(latent_dim))
-                ))
-
+                      convnextblock(64÷sc),
+                      convnextblock(64÷sc),
+                      Conv((1, 1), 64÷sc=>latent_dim÷sc, identity; stride=1),
+                      GlobalMeanPool(),
+                      Flux.flatten)
 
 "See ON THE TRANSFER OF DISENTANGLED REPRESENTATIONS IN REALISTIC SETTINGS, Appendix A
  https://arxiv.org/pdf/2010.14407.pdf"
