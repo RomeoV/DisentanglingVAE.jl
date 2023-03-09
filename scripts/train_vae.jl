@@ -32,7 +32,7 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                             );
 
 DEVICE = gpu
-model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), DisentanglingVAE.ResidualDecoderOLD(6; sc=1), DEVICE);
+model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 # model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 
 #### Try to run the training. #######################

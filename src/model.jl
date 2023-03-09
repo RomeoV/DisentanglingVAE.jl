@@ -165,7 +165,9 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
       handle(FluxTraining.BackwardBegin())
       return state.loss
     end
-    # @show norm(gs)  # for debugging purposes
+    if norm(gs) > 1f6
+      @warn "\n Large gradient with norm" norm(gs)
+    end
     handle(FluxTraining.BackwardEnd())
     Flux.Optimise.update!(learner.optimizer, params, gs)
   end
