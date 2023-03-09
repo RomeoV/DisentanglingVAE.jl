@@ -32,7 +32,7 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                             );
 
 DEVICE = gpu
-model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
+model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), DisentanglingVAE.ResidualDecoderOLD(6; sc=1), DEVICE);
 # model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 
 #### Try to run the training. #######################
@@ -52,11 +52,11 @@ learner = FastAI.Learner(model, ELBO;
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
 nepochs = 30
-# fit!(learner, nepochs)
-fitonecycle!(learner, nepochs;
-             div=100, divfinal=1, pct_start=30//nepochs,
-             phases=(VAETrainingPhase() => dl,
-                     VAEValidationPhase() => dl_val))
+fit!(learner, nepochs)
+# fitonecycle!(learner, nepochs;
+#              div=100, divfinal=1, pct_start=30//nepochs,
+#              phases=(VAETrainingPhase() => dl,
+#                      VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
 @save joinpath(EXP_PATH, "model_ep_$nepochs.bson") model_cpu
 #####################################################

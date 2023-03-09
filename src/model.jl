@@ -8,6 +8,7 @@ import Flux.Losses: logitbinarycrossentropy
 import FluxTraining
 import FastAI: ToDevice, handle
 import Metalhead
+import LinearAlgebra: norm
 
 ##### Set up VAE ##########
 struct VAE{E, B, D}
@@ -164,6 +165,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
       handle(FluxTraining.BackwardBegin())
       return state.loss
     end
+    # @show norm(gs)  # for debugging purposes
     handle(FluxTraining.BackwardEnd())
     Flux.Optimise.update!(learner.optimizer, params, gs)
   end
