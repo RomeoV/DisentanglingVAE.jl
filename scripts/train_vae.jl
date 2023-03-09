@@ -26,7 +26,7 @@ data = mapobs(DisentanglingVAE.make_data_sample, 1:2^14)
 
 task = DisentanglingVAETask()
 
-BATCHSIZE=128
+BATCHSIZE=(occursin("Romeo", read(`hostname`, String)) ? 32 : 128)
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=false, partial=false,
                             );

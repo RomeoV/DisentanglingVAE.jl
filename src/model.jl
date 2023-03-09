@@ -132,7 +132,7 @@ end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
   (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
-  params = Flux.params(learner.encoder, learner.model.bridge, learner.model.decoder)
+  params = Flux.params(learner.model.encoder, learner.model.bridge, learner.model.decoder)
   FluxTraining.runstep(learner, phase, (; x_lhs=x_lhs, v_lhs=v_lhs, x_rhs=x_rhs, v_rhs=v_rhs, ks=ks)) do handle, state
     gs = gradient(params) do
       intermediate_lhs   = learner.model.encoder(state.x_lhs)
@@ -153,7 +153,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                             state.x̄_rhs, state.z_rhs)
 
       current_step = learner.cbstate.history[phase].steps
-      warmup_factor::Rational = min(current_step // 1_000, 1//1)
+      warmup_factor::Rational = min(current_step // 10_000, 1//1)
 
       handle(FluxTraining.LossBegin())
       state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs;

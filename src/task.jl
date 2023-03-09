@@ -3,7 +3,6 @@ using FastAI, FastVision
 import FastAI: Continuous
 import FastVision: RGB
 import FastVision: ImageTensor
-import FixedPointNumbers: N0f8
 using Random: seed!, RandomDevice
 import Distributions: Distribution, Normal
 
@@ -41,17 +40,15 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 0.5f0))
   v_rhs = rand(D, 6)
   v_rhs[ks] .= v_lhs[ks]
 
-  # img_lhs = rand(RGB{N0f8}, 64, 64) * N0f8(0.125)
-  img_lhs = zeros(RGB{N0f8}, 64, 64)
-  DisentanglingVAE.draw!(img_lhs, v_lhs[1:2]..., RGB{N0f8}(1.,0,0))
-  DisentanglingVAE.draw!(img_lhs, v_lhs[3:4]..., RGB{N0f8}(0,1.,0))
-  DisentanglingVAE.draw!(img_lhs, v_lhs[5:6]..., RGB{N0f8}(0,0,1.))
+  img_lhs = 0.1f0*rand(RGB{Float32}, 64, 64)
+  DisentanglingVAE.draw!(img_lhs, v_lhs[1:2]..., RGB{Float32}(1.,0,0))
+  DisentanglingVAE.draw!(img_lhs, v_lhs[3:4]..., RGB{Float32}(0,1.,0))
+  DisentanglingVAE.draw!(img_lhs, v_lhs[5:6]..., RGB{Float32}(0,0,1.))
 
-  # img_rhs = rand(RGB{N0f8}, 64, 64) * N0f8(0.125)
-  img_rhs = zeros(RGB{N0f8}, 64, 64)
-  DisentanglingVAE.draw!(img_rhs, v_rhs[1:2]..., RGB{N0f8}(1.,0,0))
-  DisentanglingVAE.draw!(img_rhs, v_rhs[3:4]..., RGB{N0f8}(0,1.,0))
-  DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{N0f8}(0,0,1.))
+  img_rhs = 0.1f0*rand(RGB{Float32}, 64, 64)
+  DisentanglingVAE.draw!(img_rhs, v_rhs[1:2]..., RGB{Float32}(1.,0,0))
+  DisentanglingVAE.draw!(img_rhs, v_rhs[3:4]..., RGB{Float32}(0,1.,0))
+  DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{Float32}(0,0,1.))
 
   (img_lhs, v_lhs, img_rhs, v_rhs, ks)
 end

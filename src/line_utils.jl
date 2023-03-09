@@ -1,4 +1,3 @@
-import FixedPointNumbers: N0f8
 import FastVision: RGB
 import ImageCore.ColorTypes: mapc
 
@@ -19,7 +18,7 @@ function draw!(img::Array{T, 3}, Δy::R, α::R, c::Vector{T}) where T<:Real wher
   img .+= reshape(Z, 1, size(Z)...) .* reshape(c, :, 1, 1)
   clamp!(img, 0., 1.)
 end
-function draw!(img::Matrix{RGB{N0f8}}, Δy::R, α::R, C::RGB{N0f8}) where R<:Real
+function draw!(img::Matrix{RGB{Float32}}, Δy::R, α::R, C::RGB{Float32}) where R<:Real
   p1 = (0.5+Δy, 0.5)
   p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
   f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
@@ -27,10 +26,10 @@ function draw!(img::Matrix{RGB{N0f8}}, Δy::R, α::R, C::RGB{N0f8}) where R<:Rea
   Z = f.(X)
   img_ = mapc.(x->clamp(x, 0., 1.),
                float(img) + Z.*float(C))
-  img .= convert.(RGB{N0f8}, img_)
+  img .= convert.(RGB{Float32}, img_)
 end
-function draw(dims::Tuple{Int, Int}, Δy::R, α::R, C::RGB{N0f8}) where R<:Real
-  img = zeros(RGB{N0f8}, dims...)
+function draw(dims::Tuple{Int, Int}, Δy::R, α::R, C::RGB{Float32}) where R<:Real
+  img = zeros(RGB{Float32}, dims...)
   p1 = (0.5+Δy, 0.5)
   p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
   f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
@@ -38,7 +37,7 @@ function draw(dims::Tuple{Int, Int}, Δy::R, α::R, C::RGB{N0f8}) where R<:Real
   Z = f.(X)
   img_ = mapc.(x->clamp(x, 0., 1.),
                float(img) + Z.*float(C))
-  img .= convert.(RGB{N0f8}, img_)
+  img .= convert.(RGB{Float32}, img_)
 end
 
 function draw_labels_on_image_two_ways!((img_lhs, img_rhs)::Tuple,
