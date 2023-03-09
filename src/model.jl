@@ -67,16 +67,17 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 #### Set up model #########
 # image size is (64, 64)
 # backbone_dim = 512
-backbone_dim = 512
+backbone_dim = 768
 # latent_dim = 64
 
 resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity))
 end
-convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
-# convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=128)
-#     Chain(backbone.layers[1], Chain(backbone.layers[2].layers[[1, 2, 4]]...))
-# end
+# convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
+convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny)
+    # 768 output dimension by default
+    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[[1, 2]]...))
+end
 backbone() = convnext_backbone()
 
 bridge(latent_dim) = Chain(

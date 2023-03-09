@@ -26,13 +26,13 @@ data = mapobs(DisentanglingVAE.make_data_sample, 1:2^13)
 
 task = DisentanglingVAETask()
 
-BATCHSIZE=128
+BATCHSIZE=32
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=false, partial=false,
                             );
 
 DEVICE = gpu
-model = VAE(DisentanglingVAE.resnet_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
+model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 # model = VAE(backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
 
 #### Try to run the training. #######################
