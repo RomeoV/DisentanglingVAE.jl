@@ -67,11 +67,11 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 #### Set up model #########
 # image size is (64, 64)
 # backbone_dim = 512
-backbone_dim = 128
+backbone_dim = 512
 # latent_dim = 64
 
 resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
-   Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., Dense(512, 128)))
+   Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity))
 end
 convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
 # convnext_backbone() = let backbone = Metalhead.ConvNeXt(:tiny; nclasses=128)
@@ -80,8 +80,7 @@ convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
 backbone() = convnext_backbone()
 
 bridge(latent_dim) = Chain(
-          # Dense(backbone_dim, 128, leakyrelu; bias=false),
-          leakyrelu,
+          Dense(backbone_dim, 128, leakyrelu),
           LayerNorm(128),
           Parallel(
               tuple,
@@ -131,7 +130,7 @@ end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
   (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
-  params = Flux.params(learner.model.encoder, learner.model.bridge, learner.model.decoder)
+  params = Flux.params(learner.model.bridge, learner.model.decoder)
   FluxTraining.runstep(learner, phase, (; x_lhs=x_lhs, v_lhs=v_lhs, x_rhs=x_rhs, v_rhs=v_rhs, ks=ks)) do handle, state
     gs = gradient(params) do
       intermediate_lhs   = learner.model.encoder(state.x_lhs)
