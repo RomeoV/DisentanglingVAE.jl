@@ -153,7 +153,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                             state.x̄_rhs, state.z_rhs)
 
       current_step = learner.cbstate.history[phase].steps
-      warmup_factor::Rational = min(current_step // 10_000, 1//1)
+      warmup_factor::Rational = min(current_step // 1_000, 1//1)
 
       handle(FluxTraining.LossBegin())
       state.loss = (learner.lossfn(state.x_lhs, state.x̄_lhs, μ_lhs, logσ²_lhs;
