@@ -36,16 +36,38 @@ end
 
 function FluxTraining.on(
                 ::FluxTraining.EpochEnd,
+                phase::FluxTraining.Phases.AbstractTrainingPhase,
+                cb::LinearModelCallback,
+                learner)
+    epoch = learner.cbstate.history[phase].epochs
+    if epoch % 10 == 0
+        eval_lin_callback_with_data(phase, cb, learner, :training)
+    end
+end
+function FluxTraining.on(
+                ::FluxTraining.EpochEnd,
                 phase::FluxTraining.Phases.AbstractValidationPhase,
                 cb::LinearModelCallback,
                 learner)
+    epoch = learner.cbstate.history[phase].epochs
+    if epoch % 10 != 0
+        eval_lin_callback_with_data(phase, cb, learner, :validation)
+    end
+end
+function eval_lin_callback_with_data(
+        phase::Union{FluxTraining.Phases.AbstractTrainingPhase,
+                     FluxTraining.Phases.AbstractValidationPhase},
+        cb::LinearModelCallback,
+        learner,
+        dset_symbol
+    )
     encoder, bridge = learner.model.encoder, learner.model.bridge
 
     # collect data
     # the final result will be in nobs x npredictors
     predictors = Array{Float64, 2}[];
     labels     = Array{Float64, 2}[];
-    for (xs, ys, _, _, _) in learner.data[:validation]
+    for (xs, ys, _, _, _) in learner.data[dset_symbol]
         μs = @ignore_derivatives (bridge ∘ encoder)(xs |> cb.device)[1] |> cpu
         push!(predictors, μs')
         push!(labels, ys')
