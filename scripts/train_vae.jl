@@ -52,7 +52,7 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-nepochs = 30
+nepochs=(occursin("Romeo", read(`hostname`, String)) ? 30 : 3000)
 fit!(learner, nepochs)
 # fitonecycle!(learner, nepochs;
 #              div=100, divfinal=1, pct_start=30//nepochs,
