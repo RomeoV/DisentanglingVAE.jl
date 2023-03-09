@@ -1,4 +1,5 @@
 import FastAI
+import FastAI: ShowText
 import FluxTraining
 import FluxTraining: Read, Write
 import GLM
@@ -7,6 +8,7 @@ using EllipsisNotation
 import InvertedIndices: Not
 import ChainRulesCore: @ignore_derivatives
 import OrderedCollections: OrderedDict
+import Flux: cpu, gpu
 
 struct VisualizationCallback <: FluxTraining.Callback 
   task
