@@ -82,3 +82,15 @@ FluxTraining.stateaccess(::LinearModelCallback) = (data=Read(),
                                                    model=Read(),
                                                    cbstate=(metricsepoch=Write(), history=Read()),)
 FluxTraining.runafter(::LinearModelCallback) = (VisualizationCallback, Metrics, )
+
+struct ExpDirPrinterCallback <: FluxTraining.Callback
+    path
+end
+function FluxTraining.on(
+                ::FluxTraining.EpochBegin,
+                ::FluxTraining.Phases.AbstractTrainingPhase,
+                cb::ExpDirPrinterCallback,
+                learner)
+    println(cb.path)
+end
+FluxTraining.stateaccess(::ExpDirPrinterCallback) = (; )

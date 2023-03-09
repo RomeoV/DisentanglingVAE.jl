@@ -10,7 +10,7 @@ include("flux_patches.jl")
 
 export DisentanglingVAETask, VAE, ELBO
 export VAETrainingPhase, VAEValidationPhase
-export VisualizationCallback, LinearModelCallback
+export VisualizationCallback, LinearModelCallback, ExpDirPrinterCallback
 export ResidualBlock, ResidualEncoder, ResidualDecoder
 
 greet() = print("Hello World!")
