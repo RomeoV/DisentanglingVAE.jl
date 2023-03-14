@@ -7,6 +7,7 @@ include("callbacks.jl")
 include("experiment_utils.jl")
 include("fastai_patches.jl")
 include("flux_patches.jl")
+include("uncertainty_quantification.jl")
 
 export DisentanglingVAETask, VAE, ELBO
 export VAETrainingPhase, VAEValidationPhase

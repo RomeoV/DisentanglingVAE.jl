@@ -68,19 +68,23 @@ function eval_lin_callback_with_data(
     encoder, bridge = learner.model.encoder, learner.model.bridge
 
     # collect data
-    # the final result will be in nobs x npredictors
-    predictors = Array{Float64, 2}[];
-    labels     = Array{Float64, 2}[];
+    # after combining batches, the final result will be in nobs x npredictors
+    predictors    = Array{Float64, 2}[];
+    labels        = Array{Float64, 2}[];
+    uncertainties = Array{Float64, 2}[];
     for (xs, ys, _, _, _) in learner.data[dset_symbol]
-        μs = @ignore_derivatives (bridge ∘ encoder)(xs |> cb.device)[1] |> cpu
+        μs, logσ²s = @ignore_derivatives (bridge ∘ encoder)(xs |> cb.device) .|> cpu
         push!(predictors, μs')
+        push!(uncertainties, exp.(logσ²s./2)')
         push!(labels, ys')
     end
     predictors = let predictors = vcat(predictors...)
         hcat(predictors, ones(size(predictors, 1)))  # we add a bias here
     end
-    labels = cat(labels..., dims=1)
+    labels        = vcat(labels...)
+    uncertainties = vcat(labels...)
 
+    # linear model
     models = OrderedDict(
         i => GLM.lm(predictors, ys)
         for (i, ys) in enumerate(eachslice(labels, dims=2))
@@ -102,6 +106,26 @@ function eval_lin_callback_with_data(
         p_next = minimum(p_vals[Not(1, i)])  # next "highest confidence" p value
         push!(metricsepoch, Symbol("p$(i)*"), epoch, p_ast)
         push!(metricsepoch, Symbol("p$(i)_"), epoch, p_next)
+    end
+
+    ## UNCERTAINTY QUANTIFICATION
+    # This is hacky, but I want to reuse the computed predictors also for the uncertainty quantification.
+    # Probably the better way would be to store the predictors once in another callback state, and then use them from another callback.
+    # Maybe tomorrow ;)
+    for (i, (μs, σs, ys)) in enumerate(zip(eachslice(predictors,    dims=2),
+                                           eachslice(uncertainties, dims=2),
+                                           eachslice(labels,        dims=2)))
+        c_min, c_max, c_mean = compute_calibration_metric(
+            Normal.(μs, σs), ys
+        )
+        push!(metricsepoch, Symbol("c$(i)_min"),  epoch, c_min)
+        push!(metricsepoch, Symbol("c$(i)_max"),  epoch, c_max)
+        push!(metricsepoch, Symbol("c$(i)_mean"), epoch, c_mean)
+
+        dispersion = compute_dispersion(
+            Normal.(μs, σs), ys
+        )
+        push!(metricsepoch, Symbol("d$(i)"), epoch, dispersion)
     end
 end
 FluxTraining.stateaccess(::LinearModelCallback) = (data=Read(),
