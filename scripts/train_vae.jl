@@ -27,7 +27,7 @@ n_datapoints=(occursin("Romeo", read(`hostname`, String)) ? 2^10 : 2^14)
 
 ((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
 make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[i % 15_000])  # 15_000 airplanes
-data = mapobs(DisentanglingVAE.make_data_sample, 1:n_datapoints)
+data = mapobs(make_data_sample_, 1:n_datapoints)
 
 task = DisentanglingVAETask()
 
@@ -38,7 +38,7 @@ dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
 
 DEVICE = gpu
 # model = VAE(DisentanglingVAE.convnext_backbone(), bridge(6), ResidualDecoder(6; sc=1), DEVICE);
-model = VAE(ResidualEncoder(128), bridge(128, 6), ResidualDecoder(6), DEVICE);
+model = VAE(ResidualEncoder(128), bridge(128, 12), ResidualDecoder(12), DEVICE);
 
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
