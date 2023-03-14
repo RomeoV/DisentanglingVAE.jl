@@ -9,6 +9,7 @@ import StatsBase: sample, mean
 import FastAI: fitonecycle!
 import FastAI: ObsView, mapobs, taskdataloaders
 import FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
+import FluxTraining: Checkpointer
 import Flux: cpu, gpu
 import FluxTraining: fit!
 import FastVision: ShowText, RGB
@@ -48,7 +49,8 @@ learner = FastAI.Learner(model, ELBO;
                              DisentanglingVAE.VisualizationCallback(task, gpu),
                              DisentanglingVAE.LinearModelCallback(gpu, ),
                              LogMetrics((tb_backend, csv_backend)),
-                             ExpDirPrinterCallback(EXP_PATH)])
+                             ExpDirPrinterCallback(EXP_PATH),
+                             Checkpointer(EXP_PATH)])
                              # LogHyperParams(tb_backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
