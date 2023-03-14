@@ -1,7 +1,7 @@
 # using Revise
 using DisentanglingVAE
 import DisentanglingVAE: make_experiment_path
-import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder, ResidualEncoderWithHead
+import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder, ResidualEncoderWithHead, CSVLoggerBackend, log_to
 
 import FastAI
 import Flux
@@ -22,7 +22,8 @@ _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
 EXP_PATH = make_experiment_path()
 
-data = mapobs(DisentanglingVAE.make_data_sample, 1:2^14)
+n_datapoints=(occursin("Romeo", read(`hostname`, String)) ? 2^10 : 2^14)
+data = mapobs(DisentanglingVAE.make_data_sample, 1:n_datapoints)
 
 task = DisentanglingVAETask()
 
@@ -38,6 +39,7 @@ model = VAE(ResidualEncoder(128), bridge(128, 6), ResidualDecoder(6), DEVICE);
 #### Try to run the training. #######################
 opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
 tb_backend = TensorBoardBackend(EXP_PATH)
+csv_backend = CSVLoggerBackend(EXP_PATH, 6)
 learner = FastAI.Learner(model, ELBO;
                   optimizer=opt,
                   data=(dl, dl_val),
@@ -45,19 +47,19 @@ learner = FastAI.Learner(model, ELBO;
                              FastAI.ProgressPrinter(),
                              DisentanglingVAE.VisualizationCallback(task, gpu),
                              DisentanglingVAE.LinearModelCallback(gpu, ),
-                             LogMetrics(tb_backend),
+                             LogMetrics((tb_backend, csv_backend)),
                              ExpDirPrinterCallback(EXP_PATH)])
                              # LogHyperParams(tb_backend)])
                   # callbacks=[FastAI.ProgressPrinter(), ])
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-nepochs=(occursin("Romeo", read(`hostname`, String)) ? 30 : 3000)
-fit!(learner, nepochs)
-# fitonecycle!(learner, nepochs;
-#              div=100, divfinal=1, pct_start=30//nepochs,
+n_epochs=(occursin("Romeo", read(`hostname`, String)) ? 30 : 3000)
+fit!(learner, n_epochs)
+# fitonecycle!(learner, n_epochs;
+#              div=100, divfinal=1, pct_start=30//n_epochs,
 #              phases=(VAETrainingPhase() => dl,
 #                      VAEValidationPhase() => dl_val))
 model_cpu = cpu(model);
-@save joinpath(EXP_PATH, "model_ep_$nepochs.bson") model_cpu
+@save joinpath(EXP_PATH, "model_ep_$n_epochs.bson") model_cpu
 #####################################################
