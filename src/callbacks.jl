@@ -82,7 +82,7 @@ function eval_lin_callback_with_data(
         hcat(predictors, ones(size(predictors, 1)))  # we add a bias here
     end
     labels        = vcat(labels...)
-    uncertainties = vcat(labels...)
+    uncertainties = vcat(uncertainties...)
 
     # linear model
     models = OrderedDict(
@@ -145,10 +145,10 @@ function FluxTraining.on(
 end
 FluxTraining.stateaccess(::ExpDirPrinterCallback) = (; )
 
-struct CSVLoggerBackend_ <: LoggerBackend
+struct CSVLoggerBackend <: LoggerBackend
     logdir :: String
     df :: DataFrames.DataFrame
-    function CSVLoggerBackend_(logdir, n_vars)
+    function CSVLoggerBackend(logdir, n_vars)
         names = [["Loss"];
                  ["p$(i)*"     for i in 1:n_vars];  # linear model p-value of true predictor
                  ["p$(i)_"     for i in 1:n_vars];  # minimum linear model p-value of false predictors
@@ -161,12 +161,15 @@ struct CSVLoggerBackend_ <: LoggerBackend
         new(logdir, df)
     end
 end
-CSVLoggerBackend = CSVLoggerBackend_
 
 Base.show(io::IO, backend::CSVLoggerBackend) = print(
     io, "CSVLoggerBackend(", backend.logdir, ")")
 
-function log_to(backend::CSVLoggerBackend, value::Loggables.Value, name, i; group = ())
+function FluxTraining.log_to(backend::CSVLoggerBackend, value::Loggables.Value, name, i; group = ())
+    # only log on epoch
+    if get(group, 1, nothing) == "Step"
+        return
+    end
     if nrow(backend.df) < i
         push!(backend.df, fill(NaN, length(names(backend.df))))
     end
