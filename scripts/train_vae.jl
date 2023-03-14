@@ -44,7 +44,7 @@ learner = FastAI.Learner(model, ELBO;
                   callbacks=[FastAI.ToGPU(),
                              FastAI.ProgressPrinter(),
                              DisentanglingVAE.VisualizationCallback(task, gpu),
-                             DisentanglingVAE.LinearModelCallback(gpu),
+                             DisentanglingVAE.LinearModelCallback(gpu, ),
                              LogMetrics(tb_backend),
                              ExpDirPrinterCallback(EXP_PATH)])
                              # LogHyperParams(tb_backend)])

@@ -1,7 +1,7 @@
 import FastAI
 import FastAI: ShowText
 import FluxTraining
-import FluxTraining: Read, Write
+import FluxTraining: Read, Write, Loggables, _combinename
 import GLM
 import Printf: @sprintf
 using EllipsisNotation
@@ -9,6 +9,10 @@ import InvertedIndices: Not
 import ChainRulesCore: @ignore_derivatives
 import OrderedCollections: OrderedDict
 import Flux: cpu, gpu
+import FluxTraining: LoggerBackend
+import CSV
+import DataFrames
+import DataFrames: DataFrame, nrow
 
 struct VisualizationCallback <: FluxTraining.Callback 
   task
@@ -23,10 +27,10 @@ function FluxTraining.on(
   xs = first(learner.data[:validation]) .|> x->x[.., 1:1] |> cb.device
   ys = learner.model(xs; apply_sigmoid=true);
   FastAI.showoutputbatch(ShowText(), cb.task, cpu.(xs), cpu.(ys))
-  GC.gc()
+  # GC.gc()
 end
 FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 
-                                                                      model=FluxTraining.Read(), )
+                                                     model=FluxTraining.Read(), )
 FluxTraining.runafter(::VisualizationCallback) = (Metrics,)
 
 
@@ -116,3 +120,33 @@ function FluxTraining.on(
     println(cb.path)
 end
 FluxTraining.stateaccess(::ExpDirPrinterCallback) = (; )
+
+struct CSVLoggerBackend_ <: LoggerBackend
+    logdir :: String
+    df :: DataFrames.DataFrame
+    function CSVLoggerBackend_(logdir, n_vars)
+        names = [["Loss"];
+                 ["p$(i)*"     for i in 1:n_vars];  # linear model p-value of true predictor
+                 ["p$(i)_"     for i in 1:n_vars];  # minimum linear model p-value of false predictors
+                 ["c$(i)_min"  for i in 1:n_vars];  # minimum calibration error
+                 ["c$(i)_max"  for i in 1:n_vars];  # maximum calibration error
+                 ["c$(i)_mean" for i in 1:n_vars];  # mean calibration error
+                 ["d$(i)"      for i in 1:n_vars]]  # dispersion
+        arrs = fill(Float64[], length(names))
+        df = DataFrame(arrs, names)
+        new(logdir, df)
+    end
+end
+CSVLoggerBackend = CSVLoggerBackend_
+
+Base.show(io::IO, backend::CSVLoggerBackend) = print(
+    io, "CSVLoggerBackend(", backend.logdir, ")")
+
+function log_to(backend::CSVLoggerBackend, value::Loggables.Value, name, i; group = ())
+    if nrow(backend.df) < i
+        push!(backend.df, fill(NaN, length(names(backend.df))))
+    end
+
+    backend.df[i, name] = value.data
+    CSV.write(joinpath(backend.logdir, "log.csv"), backend.df)
+end
