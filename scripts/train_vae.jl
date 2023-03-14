@@ -6,7 +6,7 @@ import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder, Res
 import FastAI
 import Flux
 import StatsBase: sample, mean
-import FastAI: fitonecycle!
+import FastAI: fitonecycle!, load, datarecipes
 import FastAI: ObsView, mapobs, taskdataloaders
 import FastAI: TensorBoardBackend, LogMetrics, LogHyperParams
 import FluxTraining: Checkpointer
@@ -24,6 +24,9 @@ BE = ShowText();  # sometimes get segfault by default
 EXP_PATH = make_experiment_path()
 
 n_datapoints=(occursin("Romeo", read(`hostname`, String)) ? 2^10 : 2^14)
+
+((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
+make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[i % 15_000])  # 15_000 airplanes
 data = mapobs(DisentanglingVAE.make_data_sample, 1:n_datapoints)
 
 task = DisentanglingVAETask()

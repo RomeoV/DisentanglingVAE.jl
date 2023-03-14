@@ -29,7 +29,8 @@ end
 
 make_data_sample(i::Int) = make_data_sample(Normal, i)
 
-function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 0.5f0))
+rand_x0(_) = 0.1f0*rand(RGB{Float32}, 32, 32)
+function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 0.5f0), x0_fn=rand_x0)
   # the ks are sampled truely randomly, i.e. with a device that is not seeded
   # each concept has a chance of being forced to be "the same"
   k = rand(RandomDevice(), 1:6)
@@ -40,12 +41,12 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 0.5f0))
   v_rhs = rand(D, 6)
   v_rhs[ks] .= v_lhs[ks]
 
-  img_lhs = 0.1f0*rand(RGB{Float32}, 64, 64)
+  img_lhs = x0_fn(i) .|> RGB{Float32}
   DisentanglingVAE.draw!(img_lhs, v_lhs[1:2]..., RGB{Float32}(1.,0,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[3:4]..., RGB{Float32}(0,1.,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[5:6]..., RGB{Float32}(0,0,1.))
 
-  img_rhs = 0.1f0*rand(RGB{Float32}, 64, 64)
+  img_rhs = x0_fn(i) .|> RGB{Float32}
   DisentanglingVAE.draw!(img_rhs, v_rhs[1:2]..., RGB{Float32}(1.,0,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[3:4]..., RGB{Float32}(0,1.,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{Float32}(0,0,1.))
