@@ -23,8 +23,10 @@ import Distributions: Normal
 _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
 EXP_PATH = make_experiment_path()
+# DRY -> solve much smaller problem, usually for local machine
+DRY = occursin("Romeo", read(`hostname`, String))
 
-n_datapoints=(occursin("Romeo", read(`hostname`, String)) ? 2^10 : 2^14)
+n_datapoints=(DRY ? 2^10 : 2^14)
 
 ((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
 make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[(i % 15_000)+1])  # 15_000 airplanes
@@ -32,7 +34,7 @@ data = mapobs(make_data_sample_, 1:n_datapoints)
 
 task = DisentanglingVAETask()
 
-BATCHSIZE=(occursin("Romeo", read(`hostname`, String)) ? 32 : 128)
+BATCHSIZE=(DRY ? 32 : 128)
 dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
                              buffer=false, partial=false,
                             );
@@ -60,7 +62,7 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-n_epochs=(occursin("Romeo", read(`hostname`, String)) ? 30 : 3000)
+n_epochs=(DRY ? 30 : 3000)
 fit!(learner, n_epochs)
 # fitonecycle!(learner, n_epochs;
 #              div=100, divfinal=1, pct_start=30//n_epochs,
