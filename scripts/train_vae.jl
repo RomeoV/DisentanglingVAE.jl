@@ -1,6 +1,6 @@
 # using Revise
 using DisentanglingVAE
-import DisentanglingVAE: make_experiment_path
+import DisentanglingVAE: make_experiment_path, make_data_sample
 import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder, ResidualEncoderWithHead, CSVLoggerBackend, log_to
 
 import FastAI
@@ -17,6 +17,7 @@ import ChainRulesCore: @ignore_derivatives
 import MLUtils: _default_executor
 import MLUtils.Transducers: ThreadedEx
 import BSON: @save
+import Distributions: Normal
 @info "Starting train_vae.jl script"
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 _default_executor() = ThreadedEx()
@@ -26,7 +27,7 @@ EXP_PATH = make_experiment_path()
 n_datapoints=(occursin("Romeo", read(`hostname`, String)) ? 2^10 : 2^14)
 
 ((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
-make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[i % 15_000])  # 15_000 airplanes
+make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[(i % 15_000)+1])  # 15_000 airplanes
 data = mapobs(make_data_sample_, 1:n_datapoints)
 
 task = DisentanglingVAETask()
