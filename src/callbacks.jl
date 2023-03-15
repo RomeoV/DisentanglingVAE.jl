@@ -115,6 +115,9 @@ function eval_lin_callback_with_data(
     for (i, (μs, σs, ys)) in enumerate(zip(eachslice(predictors,    dims=2),
                                            eachslice(uncertainties, dims=2),
                                            eachslice(labels,        dims=2)))
+        # rescale latent predictors according to linear model
+        μs .+= GLM.coef(models[i])[end]
+        σs .*= abs.(GLM.coef(models[i])[i])
         c_min, c_max, c_mean = compute_calibration_metric(
             Normal.(μs, σs), ys
         )
