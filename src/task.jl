@@ -34,19 +34,20 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 0.5f0),
   # the ks are sampled truely randomly, i.e. with a device that is not seeded
   # each concept has a chance of being forced to be "the same"
   k = rand(RandomDevice(), 1:6)
-  ks = zeros(Bool, 6); ks[k] = true
+  ks = ones(Bool, 6); ks[k] = false
   seed!(i)
   D = DT(Dargs...)
   v_lhs = rand(D, 6)
   v_rhs = rand(D, 6)
   v_rhs[ks] .= v_lhs[ks]
+  x0 = x0_fn(i) .|> RGB{Float32}
 
-  img_lhs = x0_fn(i) .|> RGB{Float32}
+  img_lhs = copy(x0)
   DisentanglingVAE.draw!(img_lhs, v_lhs[1:2]..., RGB{Float32}(1.,0,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[3:4]..., RGB{Float32}(0,1.,0))
   DisentanglingVAE.draw!(img_lhs, v_lhs[5:6]..., RGB{Float32}(0,0,1.))
 
-  img_rhs = x0_fn(i) .|> RGB{Float32}
+  img_rhs = copy(x0)
   DisentanglingVAE.draw!(img_rhs, v_rhs[1:2]..., RGB{Float32}(1.,0,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[3:4]..., RGB{Float32}(0,1.,0))
   DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{Float32}(0,0,1.))
