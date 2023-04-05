@@ -87,7 +87,7 @@ bridge(backbone_dim, latent_dim) = Chain(
           Parallel(
               tuple,
               Dense(1//10*Flux.glorot_uniform(latent_dim, 128),
-                    zeros(Float32, latent_dim)),  # logvar
+                    zeros(Float32, latent_dim)),  # mu
               # Special initialization, see https://arxiv.org/pdf/2010.14407.pdf, Table 2 (Appendix)
               Dense(1//10*Flux.glorot_uniform(latent_dim, 128),
                     -1*ones(Float32, latent_dim)),  # logvar
