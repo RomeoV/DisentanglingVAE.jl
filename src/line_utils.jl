@@ -18,9 +18,10 @@ function draw!(img::Array{T, 3}, Δy::R, α::R, c::Vector{T}) where T<:Real wher
   img .+= reshape(Z, 1, size(Z)...) .* reshape(c, :, 1, 1)
   clamp!(img, 0., 1.)
 end
+# we assume Δy and α are from N(0,1), and scale them accordingly
 function draw!(img::Matrix{RGB{Float32}}, Δy::R, α::R, C::RGB{Float32}) where R<:Real
-  p1 = (0.5+Δy, 0.5)
-  p2 = (0.5+Δy+cos(α*pi/2), 0.5+sin(α*pi/2))
+  p1 = (0.5+Δy/4, 0.5)
+  p2 = (0.5+Δy/4 + cos(α*pi/4), 0.5+sin(α*pi/4))
   f(t) = 2 ./ exp.(800*dist_point_to_line(p1, p2, t)^2)
   X = make_X(size(img))
   Z = f.(X)
