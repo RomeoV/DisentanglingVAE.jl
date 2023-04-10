@@ -62,7 +62,7 @@ learner = FastAI.Learner(model, ELBO;
 
 # test one input
 # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-n_epochs=(DRY ? 30 : 3000)
+n_epochs=(DRY ? 3 : 3000)
 fit!(learner, n_epochs)
 # fitonecycle!(learner, n_epochs;
 #              div=100, divfinal=1, pct_start=30//n_epochs,
