@@ -24,7 +24,7 @@ _default_executor() = ThreadedEx()
 BE = ShowText();  # sometimes get segfault by default
 EXP_PATH = make_experiment_path()
 # DRY -> solve much smaller problem, usually for local machine
-DRY = occursin("Romeo", read(`hostname`, String))
+DRY = (isdefined(DRY) ? DRY : occursin("Romeo", read(`hostname`, String)))
 
 n_datapoints=(DRY ? 2^10 : 2^14)
 
