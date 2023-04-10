@@ -1,5 +1,6 @@
 module DisentanglingVAE
 include("line_utils.jl")
+include("losses.jl")
 include("model.jl")
 include("residual_models.jl")
 include("task.jl")
