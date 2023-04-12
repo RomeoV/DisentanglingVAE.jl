@@ -14,5 +14,5 @@ end
 
 "We want to encode rhs > lhs"
 function directionality_loss(μ_lhs, μ_rhs)
-    leakyrelu(μ_lhs - μ_rhs)
+    sum(leakyrelu(μ_lhs - μ_rhs))
 end
