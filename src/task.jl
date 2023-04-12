@@ -42,6 +42,7 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.0f0),
   v_lhs = rand(rng, D, 6)
   v_rhs = rand(rng, D, 6)
   v_rhs[ks] .= v_lhs[ks]
+  v_lhs[k], v_rhs[k] = minmax(v_lhs[k], v_rhs[k])  # we sort such that lhs < rhs always at k
   x0 :: Matrix{RGB{Float32}} = x0_fn(i) .|> RGB{Float32}
 
   img_lhs = copy(x0)

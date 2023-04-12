@@ -11,3 +11,8 @@ function cov_loss(z_batch::AbstractMatrix{<:Real}) :: eltype(z_batch)
     C = cov_(z_batch)
     (sum(C.^2) - sum(diag(C).^2)) / d
 end
+
+"We want to encode rhs > lhs"
+function directionality_loss(μ_lhs, μ_rhs)
+    leakyrelu(μ_lhs - μ_rhs)
+end
