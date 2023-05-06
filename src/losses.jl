@@ -16,3 +16,10 @@ end
 function directionality_loss(μ_lhs, μ_rhs)
     sum(leakyrelu(μ_lhs - μ_rhs))
 end
+
+function gaussian_nll((μ_pred, logvar_pred)::Tuple, y_target; eps=1e-6)
+    @assert size(μ_pred) == size(y_target)
+    mean(
+        @. 0.5 * ( max(logvar_pred, log(eps)) + (μ_pred - y_target)^2 / max(exp(logvar_pred), eps) )
+    )
+end

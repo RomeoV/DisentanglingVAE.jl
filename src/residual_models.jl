@@ -45,16 +45,16 @@ ResidualDecoder(latent_dim; sc=1) = Chain(
       convnextblock(64÷sc),
 
       Upsample(2, :bilinear),  # 8x8
-      convnextblock(64÷sc),
-      convnextblock(64÷sc),
-      Conv((1, 1), 64÷sc=>32÷sc, identity; stride=1),
+      convnextblock(32÷sc),
+      convnextblock(32÷sc),
+      Conv((1, 1), 32÷sc=>16÷sc, identity; stride=1),
 
       Upsample(2, :bilinear),  # 16x16
-      convnextblock(32÷sc),
-      convnextblock(32÷sc),
+      convnextblock(16÷sc),
+      convnextblock(16÷sc),
 
       Upsample(2, :bilinear),  # 32x32
       x->leakyrelu.(x),
-      Conv((5, 5), 32÷sc=>3, identity; stride=1, pad=SamePad()),
+      Conv((5, 5), 16÷sc=>3, identity; stride=1, pad=SamePad()),
       # xs -> xs[3:30, 3:30, :, :]  # 28x28
 )
