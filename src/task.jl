@@ -30,7 +30,8 @@ end
 make_data_sample(i::Int) = make_data_sample(Normal, i)
 
 rand_x0(_) = 0.1f0*rand(RGB{Float32}, 32, 32)
-function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.0f0), x0_fn=rand_x0)
+function make_data_sample(DT::Type{<:Distribution}, i::Int;
+                          Dargs=(0.f0, 1.0f0), x0_fn=rand_x0)
   # the ks are sampled truely randomly, i.e. with a device that is not seeded
   # each concept has a chance of being forced to be "the same"
   k = rand(RandomDevice(), 1:6)
@@ -56,4 +57,14 @@ function make_data_sample(DT::Type{<:Distribution}, i::Int; Dargs=(0.f0, 1.0f0),
   DisentanglingVAE.draw!(img_rhs, v_rhs[5:6]..., RGB{Float32}(0,0,1.))
 
   (img_lhs, v_lhs, img_rhs, v_rhs, ks)
+end
+
+
+function EncoderTask(sz)
+  SupervisedTask((Image{2}(), Continuous(6)),
+                 (ProjectiveTransforms((32, 32)),
+                  ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
+                                     stds=FastVision.SVector(1., 1., 1.);
+                                     C = RGB{Float32},
+                                     buffered=false,),))
 end

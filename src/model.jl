@@ -9,6 +9,7 @@ import FluxTraining
 import FastAI: ToDevice, handle
 import Metalhead
 import LinearAlgebra: norm
+import Match: @match
 
 ##### Set up VAE ##########
 struct VAE{E, B, D}
@@ -164,7 +165,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                                    warmup_factor=warmup_factor)
                   + learner.lossfn(state.x_rhs, state.x̄_rhs, μ̂_rhs, logσ̂²_rhs;
                                    warmup_factor=warmup_factor)
-                  + 1f-1*warmup_factor*(cov_loss(state.z_lhs) + cov_loss(state.z_rhs))
+                  # + 1f-1*warmup_factor*(cov_loss(state.z_lhs) + cov_loss(state.z_rhs))
                   + 1f-3*reg_l2(Flux.params(learner.model.decoder))  # we add some regularization here :)
                   + directionality_loss(μ̂_lhs, μ̂_rhs)
                     )
@@ -190,10 +191,16 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
   end
 end
 
-function FluxTraining.fit!(learner, nepochs::Int, (trainiter, validiter)::Tuple)
-    for i in 1:nepochs
-        epoch!(learner, VAETrainingPhase(), trainiter)
-        epoch!(learner, VAEValidationPhase(), validiter)
-    end
-end
+# function FluxTraining.fit!(learner, nepochs::Int;
+#                       phases = (TrainingPhase() => learner.data.training,
+#                                 ValidationPhase() => learner.data.validation),
+# )
+#     for _ in 1:nepochs
+#         for (phase, data) in phases
+#             epoch!(learner, phase, data)
+#         end
+#     end
+# end
+
+
 ############################################################

@@ -43,6 +43,7 @@ ResidualDecoder(latent_dim; sc=1) = Chain(
       x->reshape(x, 4, 4, 64÷sc, :),  # 4x4
       convnextblock(64÷sc),
       convnextblock(64÷sc),
+      Conv((1, 1), 64÷sc=>32÷sc, identity; stride=1),
 
       Upsample(2, :bilinear),  # 8x8
       convnextblock(32÷sc),
