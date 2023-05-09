@@ -40,8 +40,8 @@ function main_encoder()
     DEVICE = gpu
     dim_content, dim_style = 6, 0
 
-    model = Flux.Chain(ResidualEncoder(128),  # <- output dim
-                       bridge(128, dim_content+dim_style),)
+    model = Flux.Chain(DisentanglingVAE.resnet_backbone(),  # <- output dim
+                       bridge(512, dim_content+dim_style),)
 
     opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
     tb_backend = TensorBoardBackend(EXP_PATH)
@@ -56,7 +56,47 @@ function main_encoder()
                                 Checkpointer(EXP_PATH)])
 
     # test one input
-    n_epochs=(DRY ? 3 : 1000)
+    n_epochs=(DRY ? 20 : 1000)
     fit!(learner, n_epochs)
 end
-main_encoder()
+# main_encoder()
+
+function main_decoder()
+    EXP_PATH = make_experiment_path()
+    DRY = (isdefined(Main, :DRY) ? DRY : occursin("Romeo", read(`hostname`, String)))
+    task = DisentanglingVAE.DecoderTask(32)
+
+    ((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
+    airplane_img(i) = cifar10_x[(i % 15_000)+1]
+    make_data_sample_(i::Int) = make_data_sample(Normal, i;
+                                                x0_fn = i->0.1*airplane_img(i))[[2, 1]]  # 15_000 airplanes
+    n_datapoints=(DRY ? 2^10 : 2^14)
+    data = mapobs(make_data_sample_, 1:n_datapoints)
+
+    BATCHSIZE=(DRY ? 32 : 128)
+    dl, dl_val = taskdataloaders(data, task, BATCHSIZE, pctgval=0.1;
+                                buffer=false, partial=false, parallel=false,
+                                );
+
+    DEVICE = gpu
+    dim_content, dim_style = 6, 0
+
+    model = ResidualDecoder(dim_content+dim_style) |> DEVICE
+
+    opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
+    tb_backend = TensorBoardBackend(EXP_PATH)
+    csv_backend = CSVLoggerBackend(EXP_PATH, 6)
+    learner = FastAI.Learner(model, Flux.Losses.logitbinarycrossentropy;
+                    optimizer=opt,
+                    data=(dl, dl_val),
+                    callbacks=[FastAI.ToGPU(),
+                                FastAI.ProgressPrinter(),
+                                DisentanglingVAE.VisualizationCallback(task, gpu),
+                                LogMetrics((tb_backend, csv_backend)),
+                                ExpDirPrinterCallback(EXP_PATH),
+                                Checkpointer(EXP_PATH)])
+
+    # test one input
+    n_epochs=(DRY ? 20 : 1000)
+    fit!(learner, n_epochs)
+end

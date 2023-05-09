@@ -24,9 +24,18 @@ function FluxTraining.on(
                 ::FluxTraining.Phases.AbstractValidationPhase,
                 cb::VisualizationCallback,
                 learner)
-  xs = first(learner.data[:validation]) .|> x->x[.., 1:1] |> cb.device
-  ys = learner.model(xs; apply_sigmoid=true);
-  FastAI.showoutputbatch(ShowText(), cb.task, cpu.(xs), cpu.(ys))
+  if learner.model isa VAE
+    xs = first(learner.data[:validation]) .|> x->x[.., 1:1] |> cb.device
+    ys = learner.model(xs; apply_sigmoid=true);
+    FastAI.showoutputbatch(ShowText(), cb.task, cpu.(xs), cpu.(ys))
+  else
+    lhs, rhs = first(learner.data[:validation])
+    y_label = rhs[.., 1:1]
+    xs = lhs |> x->x[.., 1:1] |> cb.device
+    ys = learner.model(xs)
+    FastAI.showoutputbatch(ShowText(), cb.task, cat(y_label, cpu.(ys .|> Flux.sigmoid); dims=4))
+  end
+
   # GC.gc()
 end
 FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 

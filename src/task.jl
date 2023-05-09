@@ -68,3 +68,12 @@ function EncoderTask(sz)
                                      C = RGB{Float32},
                                      buffered=false,),))
 end
+
+function DecoderTask(sz)
+  SupervisedTask((Continuous(6), Image{2}()),
+                 # (ProjectiveTransforms((32, 32)),))
+                  (ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
+                                     stds=FastVision.SVector(1., 1., 1.);
+                                     C = RGB{Float32},
+                                     buffered=false,),))
+end
