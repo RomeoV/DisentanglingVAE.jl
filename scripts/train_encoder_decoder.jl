@@ -10,9 +10,11 @@ import Flux
 import StatsBase: sample, mean
 import FastAI: load, datarecipes
 import FastAI: mapobs, taskdataloaders
+import FluxTraining
 import FluxTraining: Checkpointer
 import Flux: cpu, gpu
 import FluxTraining: fit!
+import Wandb: WandbBackend
 import MLUtils: _default_executor
 import MLUtils.Transducers: ThreadedEx
 import BSON: @save
@@ -40,18 +42,19 @@ function main_encoder()
     DEVICE = gpu
     dim_content, dim_style = 6, 0
 
-    model = Flux.Chain(DisentanglingVAE.resnet_backbone(),  # <- output dim
-                       bridge(512, dim_content+dim_style),)
+    model = Flux.Chain(ResidualEncoder(128),  # <- output dim
+                       bridge(128, dim_content+dim_style),)
 
     opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
     tb_backend = TensorBoardBackend(EXP_PATH)
+    wandb_backend = WandbBackend(; project="DisentanglingVAE", entity="romeov")
     csv_backend = CSVLoggerBackend(EXP_PATH, 6)
     learner = FastAI.Learner(model, gaussian_nll;
                     optimizer=opt,
                     data=(dl, dl_val),
                     callbacks=[FastAI.ToGPU(),
                                 FastAI.ProgressPrinter(),
-                                LogMetrics((tb_backend, csv_backend)),
+                                LogMetrics((tb_backend, wandb_backend, csv_backend)),
                                 ExpDirPrinterCallback(EXP_PATH),
                                 Checkpointer(EXP_PATH)])
 
@@ -85,6 +88,7 @@ function main_decoder()
 
     opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
     tb_backend = TensorBoardBackend(EXP_PATH)
+    wandb_backend = WandbBackend(; project="DisentanglingVAE", entity="romeov", name="decoder-only")
     csv_backend = CSVLoggerBackend(EXP_PATH, 6)
     learner = FastAI.Learner(model, Flux.Losses.logitbinarycrossentropy;
                     optimizer=opt,
@@ -92,11 +96,12 @@ function main_decoder()
                     callbacks=[FastAI.ToGPU(),
                                 FastAI.ProgressPrinter(),
                                 DisentanglingVAE.VisualizationCallback(task, gpu),
-                                LogMetrics((tb_backend, csv_backend)),
+                                LogMetrics((tb_backend, wandb_backend, csv_backend)),
                                 ExpDirPrinterCallback(EXP_PATH),
                                 Checkpointer(EXP_PATH)])
 
     # test one input
-    n_epochs=(DRY ? 20 : 1000)
+    n_epochs=(DRY ? 100 : 1000)
     fit!(learner, n_epochs)
+    close(wandb_backend)
 end

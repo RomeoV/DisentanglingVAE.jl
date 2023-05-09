@@ -72,7 +72,7 @@ reg_l2(params) = sum(x->sum(x.^2), params)
 # backbone_dim = 768
 # latent_dim = 64
 
-resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=true)
+resnet_backbone() = let backbone = Metalhead.ResNet(18; pretrain=false)
    Chain(backbone.layers[1], Chain(backbone.layers[2].layers[1:2]..., identity))
 end
 # convnext_backbone() = Metalhead.ConvNeXt(:tiny; nclasses=backbone_dim)
@@ -167,7 +167,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                                    warmup_factor=warmup_factor)
                   # + 1f-1*warmup_factor*(cov_loss(state.z_lhs) + cov_loss(state.z_rhs))
                   + 1f-3*reg_l2(Flux.params(learner.model.decoder))  # we add some regularization here :)
-                  + directionality_loss(μ̂_lhs, μ̂_rhs)
+                  + warmup_factor*directionality_loss(μ̂_lhs, μ̂_rhs)
                     )
 
       handle(FluxTraining.BackwardBegin())
@@ -191,16 +191,15 @@ function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
   end
 end
 
-# function FluxTraining.fit!(learner, nepochs::Int;
-#                       phases = (TrainingPhase() => learner.data.training,
-#                                 ValidationPhase() => learner.data.validation),
-# )
-#     for _ in 1:nepochs
-#         for (phase, data) in phases
-#             epoch!(learner, phase, data)
-#         end
-#     end
-# end
+function FluxTraining.fit!(learner, nepochs::Int,
+                           phases::Tuple{Pair{<:FluxTraining.AbstractTrainingPhase, <:Flux.DataLoader},
+                                         Pair{<:FluxTraining.AbstractValidationPhase, <:Flux.DataLoader}})
+    for _ in 1:nepochs
+        for (phase, data) in phases
+          epoch!(learner, phase, data)
+        end
+    end
+end
 
 
 ############################################################
