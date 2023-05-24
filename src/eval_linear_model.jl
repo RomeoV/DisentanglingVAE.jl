@@ -13,6 +13,7 @@ import BSON: @load
 using StaticArrays
 import Random
 using Plots, StatsPlots
+using LaTeXStrings
 
 import FastAI.Flux.MLUtils: _default_executor
 import FastAI.MLUtils.Transducers: ThreadedEx
@@ -37,7 +38,8 @@ dl, dl_val = taskdataloaders(line_data, task, BATCHSIZE, pctgval=0.1;
                             );
 
 # @load "sherlock_experiments/experiments/include-style_552bd18_9b0e765e/version_1/checkpoint_epoch_149_loss_3354.328371263587.bson" model;
-@load "/tmp/model.bson" model;
+# @load "/tmp/ordered_model3.bson" model;
+@load "/home/romeo/Documents/Stanford/google_ood/DisentanglingVAE.jl/experiments/directionality-loss_89a7c31_4776eb46/version_1/checkpoint_epoch_090_loss_2107.814719063895.bson" model;
 # model = model_cpu
 
 IND = 1:6
@@ -106,3 +108,32 @@ plt = begin
           end for i in IND]
   plot(plts...; layout=(6, 1))
 end
+
+
+@df data scatter(:y_gt_1, :y_pre_1; 
+                 xlabel=L"$v_1$", ylabel=L"$z_1$", guidefontsize=18, label=false)
+savefig("plots/ordered_v1_y1.svg")
+savefig("plots/ordered_v1_y1.pdf")
+@df data scatter(:y_gt_2, :y_pre_2; 
+                 xlabel=L"$v_2$", ylabel=L"$z_2$", guidefontsize=18, label=false)
+savefig("plots/ordered_v2_y2.svg")
+savefig("plots/ordered_v2_y2.pdf")
+
+@df data scatter(:y_gt_1, :y_pre_2; 
+                 xlabel=L"$v_1$", ylabel=L"$z_2$", guidefontsize=18, label=false)
+savefig("plots/ordered_v1_y2.svg")
+savefig("plots/ordered_v1_y2.pdf")
+
+mat_gt = Matrix(data[!, [:y_gt_1, :y_gt_2, :y_gt_3, :y_gt_4, :y_gt_5, :y_gt_6]])
+mat_pre = Matrix(data[!, [:y_pre_1, :y_pre_2, :y_pre_3, :y_pre_4, :y_pre_5, :y_pre_6]])
+cor_mat = cor(mat_gt, mat_pre)
+heatmap(cor_mat; xlabel="ground truth", ylabel="embeddings")
+savefig("plots/ordered_cor_mat.svg")
+savefig("plots/ordered_cor_mat.pdf")
+
+plts = []
+for i in 1:6, j in 1:6
+  plt = scatter(data[!, "y_gt_$i"], data[!, "y_pre_$j"], label=false, xticks=false, yticks=false, markersize=0.5, alpha=0.5)
+  push!(plts, plt)
+end
+plot(plts...; layout=(6, 6))
