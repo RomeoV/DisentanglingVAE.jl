@@ -110,7 +110,7 @@ img_plt = lift(idx) do idx
     img_arr = nth(dl, idx÷BATCHSIZE + 1)[1][:, :, :, idx % BATCHSIZE] |> x->permutedims(x, (3, 1, 2))
     img_arr .|> float64 |> colorview(RGB)
 end
-image(fig[1, 2], img_plt)
+image(fig[1, 2], img_plt; interpolate=false)
 
 ## highlight currently selected datapoint
 highlight_x = lift(ls_ij.sliders[1].value, ls_ij.sliders[2].value, idx) do i, j, idx
