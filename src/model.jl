@@ -166,8 +166,10 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
                   + learner.lossfn(state.x_rhs, state.x̄_rhs, μ̂_rhs, logσ̂²_rhs;
                                    warmup_factor=warmup_factor)
                   # + 1f-1*warmup_factor*(cov_loss(state.z_lhs) + cov_loss(state.z_rhs))
-                  + 1f-3*reg_l2(Flux.params(learner.model.decoder))  # we add some regularization here :)
-                  + warmup_factor*directionality_loss(μ̂_lhs, μ̂_rhs)
+                  # + 1f-3*reg_l2(Flux.params(learner.model.decoder))  # we add some regularization here :)
+                  # + warmup_factor*directionality_loss(μ̂_lhs, μ̂_rhs)
+                  + mean((state.z_lhs .- state.v_lhs).^2)
+                  + mean((state.z_rhs .- state.v_rhs).^2)
                     )
 
       handle(FluxTraining.BackwardBegin())
@@ -179,6 +181,46 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
     handle(FluxTraining.BackwardEnd())
     Flux.Optimise.update!(learner.optimizer, params, gs)
   end
+end
+
+mutable struct VAELoss{T}
+  reconstruction_loss
+  λ_kl::T
+  λ_l2_decoder::T
+  λ_cov::T
+  λ_directionality::T
+  λ_direct_supervision::T
+end
+using SimpleConfig, Configurations
+@option struct LossConfig end
+VAELoss(cfg::LossConfig) = VAELoss(
+    eval(Symbol(cfg.reconstruction_loss)), # string to symbol
+    cfg.λ_kl,
+    cfg.λ_l2_decoder,
+    cfg.λ_cov,
+    cfg.λ_directionality,
+    cfg.λ_direct_supervision)
+
+# s = state
+function (loss::VAELoss)(s::FluxTraining.PropDict)
+  # ELBO w/ ELBO_tradeoff
+  # covariance loss
+  # decoder regularization
+  # directionality loss
+  # direct supervision
+  ( # ELBO
+    loss.reconstruction_loss(s.x_lhs, s.x̄_lhs) + loss.λ_kl * kl_divergence(s.μ̂_lhs, s.logσ̂²_lhs)
+  + loss.reconstruction_loss(s.x_rhs, s.x̄_rhs) + loss.λ_kl * kl_divergence(s.μ̂_rhs, s.logσ̂²_rhs)
+    # decoder regularization
+  + loss.λ_l2_decoder * reg_l2(Flux.params(learner.model.decoder))
+    # covariance regularization
+  + loss.λ_cov*(cov_loss(state.z_lhs) + cov_loss(state.z_rhs))
+    # directionality loss
+  + loss.λ_directionality*directionality_loss(μ̂_lhs, μ̂_rhs)
+    # direct supervision
+    + loss.λ_direct_supervision*(  mean((state.z_lhs .- state.v_lhs).^2)
+                                 + mean((state.z_rhs .- state.v_rhs).^2))
+   )
 end
 
 function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
