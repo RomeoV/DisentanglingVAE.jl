@@ -27,11 +27,16 @@ import Distributions: Distribution, Normal
 #   BlockTask((; sample, x, y, ŷ, encodedsample), enc)
 # end
 DisentanglingVAETask() = 
-    let tpl_in = (Image{2}(), Continuous(6), Image{2}(), Continuous(6), Continuous(6)),
-        tpl_out = (Image{2}(), Continuous(6), Image{2}(), Continuous(6)),
+    let tpl_in   = (Image{2}(), Continuous(6),                  # LHS: x, v,
+                    Image{2}(), Continuous(6),                  # RHS: x, v,
+                    Continuous(6)),                             # ks content
+        tpl_pred = (Image{2}(), Continuous(6), Continuous(6),   # LHS: x̄, μ, logσ²,
+                    Image{2}(), Continuous(6), Continuous(6)),  # RHS: x̄, μ, logσ²
+        tpl_out  = (Image{2}(), Continuous(6),                  # LHS: x, v,
+                    Image{2}(), Continuous(6)),                 # RHS: x, v
         encodings = (ProjectiveTransforms((32, 32)),
                      ImagePreprocessing())
-  SupervisedTask((tpl_in, tpl_out), encodings)
+  SupervisedTask((tpl_in, tpl_out), encodings; ŷblock=tpl_pred)
 end
 
 make_data_sample(i::Int; kwargs...) = make_data_sample(Normal(0, 1), i; kwargs...)

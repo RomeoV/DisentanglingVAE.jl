@@ -28,72 +28,59 @@ struct VAE{E, D}
   decoder::D
 end
 Flux.@functor VAE
-# VAE(backbone, bridge, decoder) = VAE(Chain(backbone, bridge),
-#                                      decoder)
-VAE() = VAE(Chain(ResidualEncoder(128),  # <- output dim
-                  bridge(128, 6)),
+VAE() = VAE(Chain(ResidualEncoder(128), bridge(128, 6)),
             ResidualDecoder(6))
 
-AbstractImageTensor = AbstractArray{T, 4} where T
-@kwdef struct VAEResultSingle{T<:AbstractImageTensor, M<:AbstractMatrix}
-  x :: T
-  v :: M
-  k :: M
-  μ :: M
-  μ̂ :: M
-  logσ² :: M
-  logσ̂² :: M
-  z :: M
-  escape :: M
-  x̄ :: T
-end
-
-struct VAEResultDouble{T, M}
-  lhs :: VAEResultSingle{T, M}
-  rhs :: VAEResultSingle{T, M}
-end
-
+const AbstractImageTensor = AbstractArray{T, 4} where T
 function (vae::VAE)(x::AbstractImageTensor{T}) where T
   μ, logσ², escape = vae.encoder(x)
   z = sample_latent(μ, logσ²) + escape
   x̄ = vae.decoder(z)
-  return (μ, logσ², escape), x̄
+  return x̄, μ, logσ²
 end
 
 function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs, ks_c)::Tuple{<:AbstractImageTensor{T},
                                                               <:AbstractMatrix{T},
                                                               <:AbstractImageTensor{T},
                                                               <:AbstractMatrix{T},
-                                                              <:AbstractMatrix{T}};
-                   apply_sigmoid=false) where T <: Real
-      activation = apply_sigmoid ? sigmoid : identity
-
-      μ_lhs, logσ²_lhs, escape_lhs = vae.encoder(x_lhs)
-      μ_rhs, logσ²_rhs, escape_rhs = vae.encoder(x_rhs)
-
-      # averaging mask with 1s for all style variables (which we always average)
-      ks_sc = let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
-          @ignore_derivatives vcat(ks_c, 1 .+ 0 .* similar(ks_c, sz))
-      end
-
-      μ̂_lhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_lhs)
-      μ̂_rhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_rhs)
-      logσ̂²_lhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_lhs)
-      logσ̂²_rhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_rhs)
-
-      z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs) + escape_lhs
-      z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs) + escape_rhs
-      x̄_lhs     = activation.(vae.decoder(z_lhs))
-      x̄_rhs     = activation.(vae.decoder(z_rhs))
-
-      out_lhs = VAEResultSingle(
-        x=x_lhs, v=v_lhs, k=ks_c, μ=μ_lhs, μ̂=μ̂_lhs, logσ²=logσ²_lhs,
-        logσ̂²=logσ̂²_lhs, z=z_lhs, escape=escape_lhs, x̄=x̄_lhs)
-      out_rhs = VAEResultSingle(
-        x=x_rhs, v=v_rhs, k=ks_c, μ=μ_rhs, μ̂=μ̂_rhs, logσ²=logσ²_rhs,
-        logσ̂²=logσ̂²_rhs, z=z_rhs, escape=escape_rhs, x̄=x̄_rhs)
-      return VAEResultDouble(out_lhs, out_rhs)
+                                                              <:AbstractMatrix{T}}) where T
+  return (vae(x_lhs)..., vae(x_rhs)...)
 end
+
+# function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs, ks_c)::Tuple{<:AbstractImageTensor{T},
+#                                                               <:AbstractMatrix{T},
+#                                                               <:AbstractImageTensor{T},
+#                                                               <:AbstractMatrix{T},
+#                                                               <:AbstractMatrix{T}};
+#                    apply_sigmoid=false) where T <: Real
+#       activation = apply_sigmoid ? sigmoid : identity
+
+#       μ_lhs, logσ²_lhs, escape_lhs = vae.encoder(x_lhs)
+#       μ_rhs, logσ²_rhs, escape_rhs = vae.encoder(x_rhs)
+
+#       # averaging mask with 1s for all style variables (which we always average)
+#       ks_sc = let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
+#           @ignore_derivatives vcat(ks_c, 1 .+ 0 .* similar(ks_c, sz))
+#       end
+
+#       μ̂_lhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_lhs)
+#       μ̂_rhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_rhs)
+#       logσ̂²_lhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_lhs)
+#       logσ̂²_rhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_rhs)
+
+#       z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs) + escape_lhs
+#       z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs) + escape_rhs
+#       x̄_lhs     = activation.(vae.decoder(z_lhs))
+#       x̄_rhs     = activation.(vae.decoder(z_rhs))
+
+#       out_lhs = VAEResultSingle(
+#         x=x_lhs, v=v_lhs, k=ks_c, μ=μ_lhs, μ̂=μ̂_lhs, logσ²=logσ²_lhs,
+#         logσ̂²=logσ̂²_lhs, z=z_lhs, escape=escape_lhs, x̄=x̄_lhs)
+#       out_rhs = VAEResultSingle(
+#         x=x_rhs, v=v_rhs, k=ks_c, μ=μ_rhs, μ̂=μ̂_rhs, logσ²=logσ²_rhs,
+#         logσ̂²=logσ̂²_rhs, z=z_rhs, escape=escape_rhs, x̄=x̄_rhs)
+#       return VAEResultDouble(out_lhs, out_rhs)
+# end
 
 @testset "model eval" begin
   task = DisentanglingVAETask()
@@ -193,6 +180,58 @@ function FluxTraining.on(
   end
 end
 
+function FluxTraining.step!(learner, phase::FluxTraining.TrainingPhase, batch)
+    xs, ys = batch
+    runstep(learner, phase, (; xs=xs, ys=ys)) do handle, state
+        state.grads = gradient(learner.params) do
+
+            x_lhs, v_lhs, x_rhs, v_rhs, ks_c = xs
+            μ_lhs, logσ²_lhs, escape_lhs = learner.model.encoder(x_lhs)
+            μ_rhs, logσ²_rhs, escape_rhs = learner.model.encoder(x_rhs)
+
+            # averaging mask with 1s for all style variables (which we always average)
+            ks_sc = let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
+                @ignore_derivatives vcat(ks_c, 1 .+ 0 .* similar(ks_c, sz))
+            end
+
+            μ̂_lhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_lhs)
+            μ̂_rhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_rhs)
+            logσ̂²_lhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_lhs)
+            logσ̂²_rhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_rhs)
+
+            z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs) + escape_lhs
+            z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs) + escape_rhs
+            x̄_lhs     = vae.decoder(z_lhs)
+            x̄_rhs     = vae.decoder(z_rhs)
+
+            state.ŷs = (x̄_lhs, μ̂_lhs, logσ̂²_lhs, x̄_rhs, μ̂_rhs, logσ̂²_rhs)
+            handle(LossBegin())
+            state.loss = let escape_layer = learner.model.encoder.layers[2].layers[end].layers[end],
+                             loss = leaner.lossfn
+              ( # ELBO 
+                loss(state.ŷs, state.ys)
+                # escape penalty
+              + loss.λ_escape_penalty * reg_l1(Flux.params(escape_layer))
+                # decoder regularization
+              + loss.λ_l2_decoder * reg_l2(Flux.params(vae.decoder))
+                # covariance regularization
+              + loss.λ_covariance * (cov_loss(pred.lhs.z) + cov_loss(pred.rhs.z))
+                # directionality loss
+              + loss.λ_directionality * directionality_loss(pred.lhs.μ̂, pred.rhs.μ̂)
+                # direct supervision
+              + loss.λ_direct_supervision * (  Flux.mse(pred.lhs.z, target.lhs.v)
+                                             + Flux.mse(pred.rhs.z, target.rhs.v) )
+              )
+            end
+            handle(BackwardBegin())
+            return state.loss
+        end
+        handle(BackwardEnd())
+        update!(learner.optimizer, learner.params, state.grads)
+    end
+end
+
+
 # function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
 #   (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
 #   params = Flux.params(learner.model.encoder, learner.model.bridge, learner.model.decoder)
@@ -266,15 +305,15 @@ end
 #    )
 # end
 
-function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
-  (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
-  FluxTraining.runstep(learner, phase, (; x_lhs=x_lhs, v_lhs=v_lhs, x_rhs=x_rhs, v_rhs=v_rhs, ks=ks)) do handle, state
-    @ignore_derivatives begin
-      state.loss = ( learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...)
-                   + learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...))
-    end
-  end
-end
+# function FluxTraining.step!(learner, phase::VAEValidationPhase, batch)
+#   (x_lhs, v_lhs, x_rhs, v_rhs, ks) = batch
+#   FluxTraining.runstep(learner, phase, (; x_lhs=x_lhs, v_lhs=v_lhs, x_rhs=x_rhs, v_rhs=v_rhs, ks=ks)) do handle, state
+#     @ignore_derivatives begin
+#       state.loss = ( learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...)
+#                    + learner.lossfn(state.x_lhs, learner.model(state.x_lhs)...))
+#     end
+#   end
+# end
 
 function FluxTraining.fit!(learner, nepochs::Int,
                            phases::Tuple{Pair{<:FluxTraining.AbstractTrainingPhase, <:Flux.DataLoader},
