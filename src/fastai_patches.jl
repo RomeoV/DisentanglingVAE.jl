@@ -17,3 +17,6 @@ end
 function FastAI.showblock!(io, ::ShowText, block::Continuous, obs::AbstractArray)
     print(io, join(round.(obs, sigdigits=3), '\n'))
 end
+
+FastAI.mockblock(block::Continuous) = rand(Float32, block.size)
+

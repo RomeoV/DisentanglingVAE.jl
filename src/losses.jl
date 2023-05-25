@@ -23,3 +23,6 @@ function gaussian_nll((μ_pred, logvar_pred)::Tuple, y_target; eps=1e-6)
         @. 0.5 * ( max(logvar_pred, log(eps)) + (μ_pred - y_target)^2 / max(exp(logvar_pred), eps) )
     )
 end
+
+reg_l1(params) = sum(x->sum(abs.(x)), params)
+reg_l2(params) = sum(x->sum(x.^2), params)

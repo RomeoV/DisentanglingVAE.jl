@@ -1,6 +1,7 @@
 module DisentanglingVAE
 include("line_utils.jl")
 include("losses.jl")
+include("loss.jl")
 include("model.jl")
 include("residual_models.jl")
 include("task.jl")
@@ -19,6 +20,7 @@ export ResidualBlock, ResidualEncoder, ResidualDecoder
 import Flux
 import FastVision
 import FastAI: mapobs, taskdataloaders, Learner, fit!
+using Configurations, SimpleConfig, ReTest
 # using PrecompileTools
 
 # @setup_workload begin
