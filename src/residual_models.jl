@@ -1,3 +1,4 @@
+import Flux
 import Flux: Chain, Conv, MeanPool, GlobalMeanPool, flatten
 import Functors: @functor
 import Metalhead: convnextblock
