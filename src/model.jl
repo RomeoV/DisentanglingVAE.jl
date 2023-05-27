@@ -1,7 +1,6 @@
 import StatsBase: sample, mean
 import ChainRulesCore: @ignore_derivatives
 import Random: randn!
-import CUDA
 import Flux
 import Flux: Dense, Parallel, Chain, LayerNorm, BatchNorm, Upsample, SamePad, leakyrelu, gradient, sigmoid, update!
 import Flux.Losses: logitbinarycrossentropy
@@ -18,18 +17,23 @@ struct VAE{E, D}
   decoder::D
 end
 Flux.@functor VAE
-VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
-            ResidualDecoder(6))
+# VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
+#             ResidualDecoder(6))
+VAE() = VAE(Chain(Flux.flatten, Dense(32*32*3=>2048), Dense(2048=>6)),
+            Chain(Dense(6=>32*32*3), x->reshape(x, 32, 32, 3, :)))
 
 sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
 const AbstractImageTensor = AbstractArray{T, 4} where T
 function (vae::VAE)(x::AbstractImageTensor{T}) where T
-  μ, logσ², escape = vae.encoder(x)
-  z = sample_latent(μ, logσ²)  # + escape
+  # μ, logσ², escape = vae.encoder(x)
+  # z = sample_latent(μ, logσ²)  # + escape
+  # x̄ = vae.decoder(z)
+  z = vae.encoder(x)
+  μ = logσ² = z
   x̄ = vae.decoder(z)
-  return x̄, μ, logσ²
+  return x̄
 end
 
 function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs, ks_c)::Tuple{<:AbstractImageTensor{T},
@@ -60,10 +64,16 @@ struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
 function FluxTraining.on(::FluxTraining.StepBegin, ::Union{VAETrainingPhase, VAEValidationPhase},
                          cb::ToDevice, learner)
-  learner.step.xs = cb.movedatafn.(learner.step.xs)
-  learner.step.ys = cb.movedatafn.(learner.step.ys)
+  # learner.step.xs = cb.movedatafn.(learner.step.xs)
+  # learner.step.ys = cb.movedatafn.(learner.step.ys)
+  learner.step.xs = cb.movedatafn(learner.step.xs)
+  learner.step.ys = cb.movedatafn(learner.step.ys)
 end
 
+FluxTraining.step!(learner, phase::VAETrainingPhase, batch) = 
+    FluxTraining.step!(learner, FluxTraining.TrainingPhase(), batch)
+
+"""
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
     xs, ys = batch
     FluxTraining.runstep(learner, phase, (; xs=xs, ys=ys)) do handle, state
@@ -95,16 +105,16 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
               ( # ELBO 
                 loss(state.ŷs, state.ys)
                 # escape penalty
-              + loss.λ_escape_penalty * reg_l1(Flux.params(escape_layer))
+              # + loss.λ_escape_penalty * reg_l1(Flux.params(escape_layer))
                 # decoder regularization
-              + loss.λ_l2_decoder * reg_l2(Flux.params(learner.model.decoder))
+              # + loss.λ_l2_decoder * reg_l2(Flux.params(learner.model.decoder))
                 # covariance regularization
-              + loss.λ_covariance * (cov_loss(z_lhs) + cov_loss(z_rhs))
+              # + loss.λ_covariance * (cov_loss(z_lhs) + cov_loss(z_rhs))
                 # directionality loss
-              + loss.λ_directionality * directionality_loss(μ̂_lhs, μ̂_rhs)
+              # + loss.λ_directionality * directionality_loss(μ̂_lhs, μ̂_rhs)
                 # direct supervision
-              + loss.λ_direct_supervision * (  Flux.mse(z_lhs, v_lhs)
-                                             + Flux.mse(z_rhs, v_rhs) )
+              # + loss.λ_direct_supervision * (  Flux.mse(z_lhs, v_lhs)
+              #                                + Flux.mse(z_rhs, v_rhs) )
               )
             end
             handle(FluxTraining.BackwardBegin())
@@ -114,6 +124,7 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
         update!(learner.optimizer, learner.params, state.grads)
     end
 end
+"""
 FluxTraining.step!(learner, phase::VAEValidationPhase, batch) =
     FluxTraining.step!(learner, FluxTraining.ValidationPhase(), batch)
 

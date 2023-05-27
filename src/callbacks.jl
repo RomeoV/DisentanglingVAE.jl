@@ -16,11 +16,12 @@ import DataFrames: DataFrame, nrow
 import MLUtils: unbatch
 
 # Otherwise we get some TTY error.
-FastAI.default_showbackend() = ShowText()
+# FastAI.default_showbackend() = ShowText()
 
-struct VisualizationCallback <: FluxTraining.Callback 
+@kwdef struct VisualizationCallback <: FluxTraining.Callback 
   task
   device
+  backend=ShowText(stdout)
 end
 
 function FluxTraining.on(
@@ -31,10 +32,10 @@ function FluxTraining.on(
     xs, ys = first(learner.data[:validation])
     ŷs = learner.model(xs[1] |> cb.device) .|> sigmoid |> cpu;
     xs_, ys_, ŷs_ = unbatch.((xs[1], ys[1], ŷs[1]))
-    FastAI.showblockinterpretable(ShowText(stdout),
-                                   cb.task.encodings,
-                                   (cb.task.blocks.y[1], cb.task.blocks.ŷ[1]),
-                                   (ys_[1], ŷs_[1]))
+    FastAI.showblockinterpretable(cb.backend,
+                                  cb.task.encodings,
+                                  (cb.task.blocks.y[1], cb.task.blocks.ŷ[1]),
+                                  (ys_[1], ŷs_[1]))
 end
 FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 
                                                      model=FluxTraining.Read(), )
@@ -143,17 +144,20 @@ FluxTraining.stateaccess(::LinearModelCallback) = (data=Read(),
                                                    cbstate=(metricsepoch=Write(), history=Read()),)
 FluxTraining.runafter(::LinearModelCallback) = (VisualizationCallback, Metrics, )
 
-struct ExpDirPrinterCallback <: FluxTraining.Callback
-    path
-end
-function FluxTraining.on(
-                ::FluxTraining.EpochBegin,
-                ::FluxTraining.Phases.AbstractTrainingPhase,
-                cb::ExpDirPrinterCallback,
-                learner)
-    println(cb.path)
-end
-FluxTraining.stateaccess(::ExpDirPrinterCallback) = (; )
+# struct ExpDirPrinterCallback <: FluxTraining.Callback
+#     path
+# end
+# function FluxTraining.on(
+#                 ::FluxTraining.EpochBegin,
+#                 ::FluxTraining.Phases.AbstractTrainingPhase,
+#                 cb::ExpDirPrinterCallback,
+#                 learner)
+#     println(cb.path)
+# end
+# FluxTraining.stateaccess(::ExpDirPrinterCallback) = (; )
+ExpDirPrinterCallback(path) = FluxTraining.CustomCallback((learner)->println(path),
+                                                           FluxTraining.EpochBegin,
+                                                           FluxTraining.AbstractTrainingPhase)
 
 struct CSVLoggerBackend <: LoggerBackend
     logdir :: String

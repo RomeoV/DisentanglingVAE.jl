@@ -5,10 +5,11 @@ import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder
 import DisentanglingVAE: VAELoss
 import DisentanglingVAE: VisualizationCallback, LinearModelCallback, CSVLoggerBackend
 import DisentanglingVAE: Λ_kl, Λ_escape_penalty
+import DisentanglingVAE.LineData: make_data_sample
 
-import FastAI
+import FastAI, FastVision
 import Flux
-import StatsBase: sample, mean
+import Optimisers
 import FastAI: fitonecycle!, load, datarecipes
 import FastAI: savetaskmodel, loadtaskmodel
 import FastAI: ObsView, mapobs, taskdataloaders
@@ -25,27 +26,38 @@ import MLUtils
 import MLUtils.Transducers: ThreadedEx
 import BSON: @save, @load
 import Distributions: Normal
-@info "Starting train_vae.jl script"
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 MLUtils._default_executor() = MLUtils.Transducers.ThreadedEx()
 
-import DisentanglingVAE.LineData: make_data_sample
+# if we don't do gc(full=true) we have CUDA memory issues... :(
+function FluxTraining.garbagecollect()
+    GC.gc(true)
+    if Base.Sys.islinux()
+        ccall(:malloc_trim, Cvoid, (Cint,), 0)
+    end
+end
 
 function main(; model_path=nothing)
+    @info "Starting VAE training."
     # experiment_config_defaults = parse_defaults(ExperimentConfig())
     # cfg = define_configuration(ExperimentConfig, experiment_config_defaults)
     cfg = (; n_datapoints=2^14,
-             batch_size=2^7,    )
+             batch_size=2^9,    )
 
     EXP_PATH = make_experiment_path()
     # DRY -> solve much smaller problem, usually for local machine
     DRY = (isdefined(Main, :DRY) ? DRY : occursin("Romeo", read(`hostname`, String)))
     DEVICE = gpu
 
-    task = DisentanglingVAETask()
+    # task = DisentanglingVAETask()
+    task = FastAI.SupervisedTask((FastVision.Image{2}(), FastVision.Image{2}()),
+                                 (FastVision.ProjectiveTransforms((32, 32)), 
+                                  FastVision.ImagePreprocessing()))
+
     model = VAE()
 
-    loss = VAELoss()
+    # loss = VAELoss()
+    loss(ŷ, y) = Flux.Losses.logitbinarycrossentropy(ŷ, y)
     loss_scheduler = FastAI.Scheduler(
         Λ_kl  => LinearWarmupSchedule(0., 1., 100),
         Λ_escape_penalty => LinearWarmupSchedule(0., 100., 10_000),
@@ -56,16 +68,33 @@ function main(; model_path=nothing)
     # the number of steps per epoch stays the same :).
     # 2^14 -> 2^11
     # 2^7 -> 2^4
-    n_datapoints=(DRY ? cfg.n_datapoints÷(2^2) : cfg.n_datapoints)
-    data = mapobs(make_data_sample, 1:n_datapoints)
+    n_datapoints=(DRY ? cfg.n_datapoints÷(2^4) : cfg.n_datapoints)
 
-    batch_size=(DRY ? cfg.batch_size÷(2^2) : cfg.batch_size)
+    # make_data_sample_foo(i) = begin
+    #   (rand(FastVision.RGB{Float32}, 32, 32),
+    #    rand(Float32, 6),
+    #    rand(FastVision.RGB{Float32}, 32, 32),
+    #    rand(Float32, 6),
+    #    rand(Float32, 6)),
+    #   (rand(FastVision.RGB{Float32}, 32, 32),
+    #    rand(Float32, 6),
+    #    rand(FastVision.RGB{Float32}, 32, 32),
+    #    rand(Float32, 6))
+    # end
+    make_data_sample_foo(i) = begin
+      (rand(FastVision.RGB{Float32}, 32, 32),
+       rand(FastVision.RGB{Float32}, 32, 32))
+    end
+    data = mapobs(make_data_sample_foo, 1:n_datapoints)
+
+    batch_size=(DRY ? cfg.batch_size÷(2^4) : cfg.batch_size)
     dl, dl_val = taskdataloaders(data, task, batch_size, pctgval=0.1;
-                                 buffer=false, partial=false,
-                                 parallel=false, # false for debugging
+                                 #buffer=false, partial=false,
+                                 # parallel=false, # false for debugging
                                  );
 
-    opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
+    # opt = Flux.Optimiser(Flux.ClipNorm(1.), Flux.Adam(3e-4))
+    opt = Optimisers.Adam(3e-4)
     tb_backend = TensorBoardBackend(EXP_PATH)
     # wandb_backend = WandbBackend(; project="DisentanglingVAE", entity="romeov")
     csv_backend = CSVLoggerBackend(EXP_PATH, 6)
@@ -73,18 +102,19 @@ function main(; model_path=nothing)
                     optimizer=opt,
                     data=(dl, dl_val),
                     callbacks=[FastAI.ToGPU(),
-                               FastAI.ProgressPrinter(),
-                               # VisualizationCallback(task, gpu),
+                               # FastAI.ProgressPrinter(),
+                               # VisualizationCallback(task=task, device=gpu),
                                # LinearModelCallback(gpu, ),
                                # LogMetrics((tb_backend, csv_backend, wandb_backend)),
-                               ExpDirPrinterCallback(EXP_PATH),
-                               Checkpointer(EXP_PATH),
-                               loss_scheduler,
-                               GarbageCollect()])
+                               # ExpDirPrinterCallback(EXP_PATH),
+                               # Checkpointer(EXP_PATH),
+                               # loss_scheduler,
+                               # GarbageCollect(n_datapoints ÷ batch_size),
+                              ])
 
     # test one input
     # @ignore_derivatives model(FastAI.getbatch(learner)[1] |> DEVICE)
-    n_epochs=(DRY ? 200 : 1000)
+    n_epochs=(DRY ? 2000 : 1000)
     fit!(learner, n_epochs, (VAETrainingPhase()=>dl, 
                              VAEValidationPhase()=>dl_val))
     # for i in 1:n_epochs

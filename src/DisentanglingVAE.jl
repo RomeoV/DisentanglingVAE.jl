@@ -23,7 +23,7 @@ export LinearWarmupSchedule
 import Flux
 import FastVision
 import FastAI: mapobs, taskdataloaders, Learner, fit!
-using Configurations, SimpleConfig, ReTest
+using Configurations, SimpleConfig
 # using PrecompileTools
 
 # @setup_workload begin
@@ -47,5 +47,31 @@ using Configurations, SimpleConfig, ReTest
 # end
 
 greet() = print("Hello World!")
+
+import PrecompileTools
+@PrecompileTools.compile_workload begin
+  import DisentanglingVAE.LineData: make_data_sample
+  _data = make_data_sample(1)
+
+  task = DisentanglingVAETask()
+  x_, y_ = FastAI.mocksample(task)
+  x = FastAI.encodeinput(task, FastAI.Training(), x_)
+  y = FastAI.encodetarget(task, FastAI.Training(), y_)
+  xs = batch([x, x])
+  ys = batch([y, y])
+
+  # model = VAE()
+  # loss = VAELoss{Float64}()
+  # ŷs = model(xs)
+  # lossval = loss(ŷs, ys)
+  # learner = Learner(model, loss; optimizer=Flux.Adam(),
+  #                   callbacks=[
+  #                     Scheduler(Λ_reconstruction =>
+  #                               LinearWarmupSchedule(0., 1., 10)),
+  #                             ])
+  # for i in 1:5
+  #   FluxTraining.step!(learner, VAETrainingPhase(), (xs, ys))
+  # end
+end
 
 end # module DisentanglingVAE
