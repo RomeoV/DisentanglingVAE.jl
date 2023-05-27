@@ -21,10 +21,13 @@ Flux.@functor VAE
 VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
             ResidualDecoder(6))
 
+sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
+       μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
+
 const AbstractImageTensor = AbstractArray{T, 4} where T
 function (vae::VAE)(x::AbstractImageTensor{T}) where T
   μ, logσ², escape = vae.encoder(x)
-  z = sample_latent(μ, logσ²) + escape
+  z = sample_latent(μ, logσ²)  # + escape
   x̄ = vae.decoder(z)
   return x̄, μ, logσ²
 end
@@ -53,36 +56,19 @@ end
   @test lossval isa AbstractFloat
 end
 
-bernoulli_loss(x, logit_rec) = logitbinarycrossentropy(logit_rec, x;
-                                                       agg=x->sum(x; dims=[1,2,3]))
-kl_divergence(μ, logσ²; agg=mean) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) |> agg
-
 struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
-
-# function FluxTraining.on(
-#     ::FluxTraining.StepBegin,
-#     ::Union{VAETrainingPhase, VAEValidationPhase},
-#     cb::ToDevice,
-#     learner,
-#   )
-#   learner.step.x_lhs = cb.movedatafn(learner.step.x_lhs)
-#   learner.step.v_lhs = cb.movedatafn(learner.step.v_lhs)
-#   learner.step.x_rhs = cb.movedatafn(learner.step.x_rhs)
-#   learner.step.v_rhs = cb.movedatafn(learner.step.v_rhs)
-#   learner.step.ks    = begin T=eltype(learner.step.x_lhs);
-#     cb.movedatafn(convert.(T, learner.step.ks))
-#   end
-# end
-
-sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
-       μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
+function FluxTraining.on(::FluxTraining.StepBegin, ::Union{VAETrainingPhase, VAEValidationPhase},
+                         cb::ToDevice, learner)
+  learner.step.xs = cb.movedatafn.(learner.step.xs)
+  learner.step.ys = cb.movedatafn.(learner.step.ys)
+end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
     xs, ys = batch
     FluxTraining.runstep(learner, phase, (; xs=xs, ys=ys)) do handle, state
         state.grads = gradient(learner.params) do
-            x_lhs, v_lhs, x_rhs, v_rhs, ks_c = xs
+            x_lhs, v_lhs, x_rhs, v_rhs, ks_c = state.xs
             μ_lhs, logσ²_lhs, escape_lhs = learner.model.encoder(x_lhs)
             μ_rhs, logσ²_rhs, escape_rhs = learner.model.encoder(x_rhs)
 
@@ -96,8 +82,8 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
             logσ̂²_lhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_lhs)
             logσ̂²_rhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_rhs)
 
-            z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs) + escape_lhs
-            z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs) + escape_rhs
+            z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs)  # + escape_lhs
+            z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs)  # + escape_rhs
             x̄_lhs     = learner.model.decoder(z_lhs)
             x̄_rhs     = learner.model.decoder(z_rhs)
 
@@ -128,23 +114,27 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
         update!(learner.optimizer, learner.params, state.grads)
     end
 end
+FluxTraining.step!(learner, phase::VAEValidationPhase, batch) =
+    FluxTraining.step!(learner, FluxTraining.ValidationPhase(), batch)
 
-@testset "model step" begin
-  model = VAE()
+@testset "model step" for device in [Flux.cpu, Flux.gpu]
+  model = VAE() |> device
   learner = Learner(model, VAELoss{Float64}(); optimizer=Flux.Adam())
 
   task = DisentanglingVAETask()
   x_, y_ = FastAI.mocksample(task)
   x = FastAI.encodeinput(task, FastAI.Training(), x_)
   y = FastAI.encodetarget(task, FastAI.Training(), y_)
-  xs = batch([x, x])
-  ys = batch([y, y])
+  xs = batch([x, x]) |> device
+  ys = batch([y, y]) |> device
 
   FluxTraining.step!(learner, VAETrainingPhase(), (xs, ys))
   @test true
 end
 
-" Necessary to use the VAE{Training,Validation}Phase instead of the normal {Training,Validation}Phase. "
+"We override fit!, which is necessary to use the VAE{Training,Validation}Phase
+ instead of the normal {Training,Validation}Phase, so that we can use our own
+ step! and data movement functions."
 function FluxTraining.fit!(learner, nepochs::Int,
                            phases::Tuple{Pair{<:FluxTraining.AbstractTrainingPhase, <:Flux.DataLoader},
                                          Pair{<:FluxTraining.AbstractValidationPhase, <:Flux.DataLoader}})

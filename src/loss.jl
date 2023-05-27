@@ -1,20 +1,22 @@
 using InlineTest
 using Configurations
+import Flux
 import FluxTraining
 import FluxTraining: HyperParameter
 import ParameterSchedulers: Triangle, Sequence, Shifted
 
-reconstruction_loss(x_, x) = mean(x-x_)
+const reconstruction_loss = Flux.Losses.logitbinarycrossentropy  # "Bernoulli loss"
+const kl_divergence(μ, logσ²; agg=mean) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) |> agg
 
 @option mutable struct VAELoss{T}
   const reconstruction_loss::Function = reconstruction_loss
   λ_reconstruction::T     = 1.0
   λ_kl::T                 = 1.0
-  λ_l2_decoder::T         = 1.0
-  λ_covariance::T         = 1.0
-  λ_directionality::T     = 1.0
-  λ_direct_supervision::T = 1.0
-  λ_escape_penalty::T     = 1.0
+  λ_l2_decoder::T         = 0.0
+  λ_covariance::T         = 0.0
+  λ_directionality::T     = 0.0
+  λ_direct_supervision::T = 0.0
+  λ_escape_penalty::T     = 1000.0
 end
 Configurations.from_dict(::Type{VAELoss{T}}, ::Type{Function}, s) where T = eval(Symbol(s))
 

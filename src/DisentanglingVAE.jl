@@ -1,5 +1,6 @@
 module DisentanglingVAE
-include("line_utils.jl")
+# include("line_utils.jl")
+include("data.jl")
 include("losses.jl")
 include("loss.jl")
 include("layers.jl")
@@ -16,6 +17,7 @@ export DisentanglingVAETask, VAE, ELBO
 export VAETrainingPhase, VAEValidationPhase
 export VisualizationCallback, LinearModelCallback, ExpDirPrinterCallback
 export ResidualBlock, ResidualEncoder, ResidualDecoder
+export LinearWarmupSchedule
 
 
 import Flux

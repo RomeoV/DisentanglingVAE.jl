@@ -13,6 +13,10 @@ import FluxTraining: LoggerBackend
 import CSV
 import DataFrames
 import DataFrames: DataFrame, nrow
+import MLUtils: unbatch
+
+# Otherwise we get some TTY error.
+FastAI.default_showbackend() = ShowText()
 
 struct VisualizationCallback <: FluxTraining.Callback 
   task
@@ -24,19 +28,13 @@ function FluxTraining.on(
                 ::FluxTraining.Phases.AbstractValidationPhase,
                 cb::VisualizationCallback,
                 learner)
-  if learner.model isa VAE
-    xs = first(learner.data[:validation]) .|> x->x[.., 1:1] |> cb.device
-    ys = learner.model(xs; apply_sigmoid=true);
-    FastAI.showoutputbatch(ShowText(), cb.task, cpu.(xs), cpu.(ys))
-  else
-    lhs, rhs = first(learner.data[:validation])
-    y_label = rhs[.., 1:1]
-    xs = lhs |> x->x[.., 1:1] |> cb.device
-    ys = learner.model(xs)
-    FastAI.showoutputbatch(ShowText(), cb.task, cat(y_label, cpu.(ys .|> Flux.sigmoid); dims=4))
-  end
-
-  # GC.gc()
+    xs, ys = first(learner.data[:validation])
+    ŷs = learner.model(xs[1] |> cb.device) .|> sigmoid |> cpu;
+    xs_, ys_, ŷs_ = unbatch.((xs[1], ys[1], ŷs[1]))
+    FastAI.showblockinterpretable(ShowText(stdout),
+                                   cb.task.encodings,
+                                   (cb.task.blocks.y[1], cb.task.blocks.ŷ[1]),
+                                   (ys_[1], ŷs_[1]))
 end
 FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 
                                                      model=FluxTraining.Read(), )
