@@ -17,23 +17,18 @@ struct VAE{E, D}
   decoder::D
 end
 Flux.@functor VAE
-# VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
-#             ResidualDecoder(6))
-VAE() = VAE(Chain(Flux.flatten, Dense(32*32*3=>2048), Dense(2048=>6)),
-            Chain(Dense(6=>32*32*3), x->reshape(x, 32, 32, 3, :)))
+VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
+            ResidualDecoder(6))
 
 sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
 const AbstractImageTensor = AbstractArray{T, 4} where T
 function (vae::VAE)(x::AbstractImageTensor{T}) where T
-  # μ, logσ², escape = vae.encoder(x)
-  # z = sample_latent(μ, logσ²)  # + escape
-  # x̄ = vae.decoder(z)
-  z = vae.encoder(x)
-  μ = logσ² = z
+  μ, logσ², escape = vae.encoder(x)
+  z = sample_latent(μ, logσ²)  # + escape
   x̄ = vae.decoder(z)
-  return x̄
+  return x̄, μ, logσ²
 end
 
 function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs, ks_c)::Tuple{<:AbstractImageTensor{T},
@@ -64,23 +59,20 @@ struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
 function FluxTraining.on(::FluxTraining.StepBegin, ::Union{VAETrainingPhase, VAEValidationPhase},
                          cb::ToDevice, learner)
-  # learner.step.xs = cb.movedatafn.(learner.step.xs)
-  # learner.step.ys = cb.movedatafn.(learner.step.ys)
-  learner.step.xs = cb.movedatafn(learner.step.xs)
-  learner.step.ys = cb.movedatafn(learner.step.ys)
+  learner.step.xs = cb.movedatafn.(learner.step.xs)
+  learner.step.ys = cb.movedatafn.(learner.step.ys)
 end
 
-FluxTraining.step!(learner, phase::VAETrainingPhase, batch) = 
-    FluxTraining.step!(learner, FluxTraining.TrainingPhase(), batch)
+# FluxTraining.step!(learner, phase::VAETrainingPhase, batch) =
+#     FluxTraining.step!(learner, FluxTraining.TrainingPhase(), batch)
 
-"""
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
     xs, ys = batch
     FluxTraining.runstep(learner, phase, (; xs=xs, ys=ys)) do handle, state
-        state.grads = gradient(learner.params) do
+        state.grads = _gradient(learner.optimizer, learner.model, learner.params) do model
             x_lhs, v_lhs, x_rhs, v_rhs, ks_c = state.xs
-            μ_lhs, logσ²_lhs, escape_lhs = learner.model.encoder(x_lhs)
-            μ_rhs, logσ²_rhs, escape_rhs = learner.model.encoder(x_rhs)
+            μ_lhs, logσ²_lhs, escape_lhs = model.encoder(x_lhs)
+            μ_rhs, logσ²_rhs, escape_rhs = model.encoder(x_rhs)
 
             # averaging mask with 1s for all style variables (which we always average)
             ks_sc = let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
@@ -94,13 +86,13 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
 
             z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs)  # + escape_lhs
             z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs)  # + escape_rhs
-            x̄_lhs     = learner.model.decoder(z_lhs)
-            x̄_rhs     = learner.model.decoder(z_rhs)
+            x̄_lhs     = model.decoder(z_lhs)
+            x̄_rhs     = model.decoder(z_rhs)
 
             state.ŷs = (x̄_lhs, μ̂_lhs, logσ̂²_lhs, x̄_rhs, μ̂_rhs, logσ̂²_rhs)
             handle(FluxTraining.LossBegin())
 
-            state.loss = let escape_layer = learner.model.encoder.layers[2].layers[end].layers[end],
+            state.loss = let escape_layer = model.encoder.layers[2].layers[end].layers[end],
                              loss = learner.lossfn
               ( # ELBO 
                 loss(state.ŷs, state.ys)
@@ -121,10 +113,10 @@ function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
             return state.loss
         end
         handle(FluxTraining.BackwardEnd())
-        update!(learner.optimizer, learner.params, state.grads)
+        learner.params, learner.model = _update!(
+            learner.optimizer, learner.params, learner.model, state.grads)
     end
 end
-"""
 FluxTraining.step!(learner, phase::VAEValidationPhase, batch) =
     FluxTraining.step!(learner, FluxTraining.ValidationPhase(), batch)
 

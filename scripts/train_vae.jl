@@ -49,15 +49,11 @@ function main(; model_path=nothing)
     DRY = (isdefined(Main, :DRY) ? DRY : occursin("Romeo", read(`hostname`, String)))
     DEVICE = gpu
 
-    # task = DisentanglingVAETask()
-    task = FastAI.SupervisedTask((FastVision.Image{2}(), FastVision.Image{2}()),
-                                 (FastVision.ProjectiveTransforms((32, 32)), 
-                                  FastVision.ImagePreprocessing()))
+    task = DisentanglingVAETask()
 
     model = VAE()
 
-    # loss = VAELoss()
-    loss(ŷ, y) = Flux.Losses.logitbinarycrossentropy(ŷ, y)
+    loss = VAELoss()
     loss_scheduler = FastAI.Scheduler(
         Λ_kl  => LinearWarmupSchedule(0., 1., 100),
         Λ_escape_penalty => LinearWarmupSchedule(0., 100., 10_000),
@@ -69,23 +65,7 @@ function main(; model_path=nothing)
     # 2^14 -> 2^11
     # 2^7 -> 2^4
     n_datapoints=(DRY ? cfg.n_datapoints÷(2^4) : cfg.n_datapoints)
-
-    # make_data_sample_foo(i) = begin
-    #   (rand(FastVision.RGB{Float32}, 32, 32),
-    #    rand(Float32, 6),
-    #    rand(FastVision.RGB{Float32}, 32, 32),
-    #    rand(Float32, 6),
-    #    rand(Float32, 6)),
-    #   (rand(FastVision.RGB{Float32}, 32, 32),
-    #    rand(Float32, 6),
-    #    rand(FastVision.RGB{Float32}, 32, 32),
-    #    rand(Float32, 6))
-    # end
-    make_data_sample_foo(i) = begin
-      (rand(FastVision.RGB{Float32}, 32, 32),
-       rand(FastVision.RGB{Float32}, 32, 32))
-    end
-    data = mapobs(make_data_sample_foo, 1:n_datapoints)
+    data = mapobs(make_data_sample, 1:n_datapoints)
 
     batch_size=(DRY ? cfg.batch_size÷(2^4) : cfg.batch_size)
     dl, dl_val = taskdataloaders(data, task, batch_size, pctgval=0.1;
@@ -102,13 +82,13 @@ function main(; model_path=nothing)
                     optimizer=opt,
                     data=(dl, dl_val),
                     callbacks=[FastAI.ToGPU(),
-                               # FastAI.ProgressPrinter(),
-                               # VisualizationCallback(task=task, device=gpu),
+                               FastAI.ProgressPrinter(),
+                               VisualizationCallback(task=task, device=gpu),
                                # LinearModelCallback(gpu, ),
-                               # LogMetrics((tb_backend, csv_backend, wandb_backend)),
-                               # ExpDirPrinterCallback(EXP_PATH),
+                               LogMetrics((tb_backend, csv_backend, wandb_backend)),
+                               ExpDirPrinterCallback(EXP_PATH),
                                # Checkpointer(EXP_PATH),
-                               # loss_scheduler,
+                               loss_scheduler,
                                # GarbageCollect(n_datapoints ÷ batch_size),
                               ])
 
