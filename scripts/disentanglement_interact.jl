@@ -3,7 +3,6 @@ import Distributions: make_data_sample
 using DataFrames
 using BSON
 using Distributions
-using FastAI: Continuous
 using FastAI.Flux
 using StaticArrays: SVector
 import FastAI.Flux.MLUtils

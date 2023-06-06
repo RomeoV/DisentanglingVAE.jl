@@ -3,7 +3,6 @@ using GLM
 using DataFrames
 using Distributions
 using BSON
-using FastAI: Continuous
 using FastAI.Flux
 import FastAI.Flux.MLUtils
 import Metalhead

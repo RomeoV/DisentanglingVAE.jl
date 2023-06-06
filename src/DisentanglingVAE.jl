@@ -1,5 +1,7 @@
 module DisentanglingVAE
 # include("line_utils.jl")
+include("flux_patches.jl")
+include("fastai_patches.jl")
 include("data.jl")
 include("losses.jl")
 include("loss.jl")
@@ -9,8 +11,6 @@ include("model.jl")
 include("task.jl")
 include("callbacks.jl")
 include("experiment_utils.jl")
-include("fastai_patches.jl")
-include("flux_patches.jl")
 include("uncertainty_quantification.jl")
 
 export DisentanglingVAETask, VAE, ELBO

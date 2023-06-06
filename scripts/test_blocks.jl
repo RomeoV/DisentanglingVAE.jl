@@ -7,11 +7,11 @@ BE = ShowText();
 
 task = begin
   BoundedImgTensor(dim) = Bounded{2, ImageTensor{2}}(ImageTensor{2}(3), (dim, dim));
-  sample = (Image{2}(), Continuous(6))
+  sample = (Image{2}(), Continuous32(6))
   x = BoundedImgTensor(32)
-  y = (BoundedImgTensor(32), Continuous(6))
-  ŷ = (BoundedImgTensor(32), Continuous(6))
-  encodedsample = (BoundedImgTensor(32), Continuous(6))
+  y = (BoundedImgTensor(32), Continuous32(6))
+  ŷ = (BoundedImgTensor(32), Continuous32(6))
+  encodedsample = (BoundedImgTensor(32), Continuous32(6))
   enc = ( ProjectiveTransforms((32, 32)),
           ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
                              stds=FastVision.SVector(1., 1., 1.);
@@ -22,7 +22,7 @@ task = begin
   BlockTask((; sample, x, y, ŷ, encodedsample), enc)
 end
 
-FastAI.testencoding(enc, (Image{2}(), Continuous(6)))
+FastAI.testencoding(enc, (Image{2}(), Continuous32(6)))
 
 sample_fn(_) = begin
   sample = (rand(RGB{N0f8}, 64, 64), rand(Float64, 6))
