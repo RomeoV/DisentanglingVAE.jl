@@ -1,7 +1,7 @@
 import FastAI
 import FastAI: ShowText
 import FluxTraining
-import FluxTraining: Read, Write, Loggables, _combinename
+import FluxTraining: Read, Write, Loggables, Metrics, _combinename
 import GLM
 import Printf: @sprintf
 using EllipsisNotation

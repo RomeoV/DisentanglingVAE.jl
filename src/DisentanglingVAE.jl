@@ -5,6 +5,7 @@ include("fastai_patches.jl")
 include("data.jl")
 include("losses.jl")
 include("loss.jl")
+include("config.jl")
 include("layers.jl")
 include("residual_models.jl")
 include("model.jl")
@@ -18,12 +19,12 @@ export VAETrainingPhase, VAEValidationPhase
 export VisualizationCallback, LinearModelCallback, ExpDirPrinterCallback
 export ResidualBlock, ResidualEncoder, ResidualDecoder
 export LinearWarmupSchedule
+import CUDA
 
 
-import Flux
-import FastVision
-import FastAI: mapobs, taskdataloaders, Learner, fit!
-using Configurations, SimpleConfig
+# import Flux
+# import FastVision
+# import FastAI: mapobs, taskdataloaders, Learner, fit!
 # using PrecompileTools
 
 # @setup_workload begin

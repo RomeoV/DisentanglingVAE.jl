@@ -39,8 +39,9 @@ end
 @testset "model eval" begin
   task = DisentanglingVAETask()
   x_, y_ = FastAI.mocksample(task)
-  x = FastAI.encodeinput(task, FastAI.Training(), x_)
+  # x = FastAI.encodeinput(task, FastAI.Training(), x_)
   y = FastAI.encodetarget(task, FastAI.Training(), y_)
+  x = y[[1, 3]]
   xs = batch([x, x])
   ys = batch([y, y])
 
@@ -56,12 +57,14 @@ struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
 function FluxTraining.on(::FluxTraining.StepBegin, ::Union{VAETrainingPhase, VAEValidationPhase},
                          cb::ToDevice, learner)
-  @assert objectid(learner.step.xs[1]) == objectid(learner.step.ys[1])
-  @assert objectid(learner.step.xs[2]) == objectid(learner.step.ys[3])
+  # WARNING: this assumes that x and y[[1, 3]] are the same data!
+  # we check this by only checking a few elements
+  @assert all(learner.step.xs[1][1:5] .== learner.step.ys[1][1:5]) "$(learner.step.xs[1][1:5]) $(learner.step.ys[1][1:5])"
+  @assert all(learner.step.xs[2][1:5] .== learner.step.ys[3][1:5]) "$(learner.step.xs[2][1:5]) $(learner.step.ys[3][1:5])"
 
   learner.step.ys = cb.movedatafn.(learner.step.ys)
   # we only want to move the data to gpu once.
-  learner.step.xs = (learner.step.ys[1], learner.step.ys[3])
+  learner.step.xs = (copy(learner.step.ys[1]), copy(learner.step.ys[3]))
 end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
@@ -121,15 +124,18 @@ FluxTraining.step!(learner, phase::VAEValidationPhase, batch) =
     FluxTraining.step!(learner, FluxTraining.ValidationPhase(), batch)
 
 @testset "model step" for device in [Flux.cpu, Flux.gpu]
-  model = VAE() |> device
-  learner = Learner(model, VAELoss{Float64}(); optimizer=Optimisers.Adam())
+  model = VAE()
+  learner = Learner(model, VAELoss{Float64}();
+                    optimizer=Optimisers.Adam(),
+                    callbacks=[FluxTraining.ToDevice(device, device)])
 
   task = DisentanglingVAETask()
   x_, y_ = FastAI.mocksample(task)
-  x = FastAI.encodeinput(task, FastAI.Training(), x_)
+  # x = FastAI.encodeinput(task, FastAI.Training(), x_)
   y = FastAI.encodetarget(task, FastAI.Training(), y_)
-  xs = batch([x, x]) |> device
-  ys = batch([y, y]) |> device
+  x = y[[1, 3]]
+  xs = batch([x, x])
+  ys = batch([y, y])
 
   FluxTraining.step!(learner, VAETrainingPhase(), (xs, ys))
   @test true
@@ -143,7 +149,7 @@ function FluxTraining.fit!(learner, nepochs::Int,
                                          Pair{<:FluxTraining.AbstractValidationPhase, <:Flux.DataLoader}})
     for _ in 1:nepochs
         for (phase, data) in phases
-          epoch!(learner, phase, data)
+          FluxTraining.epoch!(learner, phase, data)
         end
     end
 end

@@ -3,7 +3,9 @@ using Configurations
 import Flux
 import FluxTraining
 import FluxTraining: HyperParameter
+import Optimisers
 import ParameterSchedulers: Triangle, Sequence, Shifted
+import FastAI: Scheduler, Learner
 
 const reconstruction_loss = Flux.Losses.logitbinarycrossentropy  # "Bernoulli loss"
 const kl_divergence(μ, logσ²; agg=mean) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) |> agg
@@ -85,10 +87,9 @@ LinearWarmupSchedule(startlr, initlr, warmup_steps=-1) =
   loss = VAELoss{Float64}(reconstruction_loss=local_reconstruction_loss)
 
   model = VAE()
-  learner = Learner(model, loss; optimizer=Flux.Adam(),
-                    callbacks=[
-                      Scheduler(Λ_reconstruction =>
-                                LinearWarmupSchedule(0., 1., 10)),
+  learner = Learner(model, loss; optimizer=Optimisers.Adam(),
+                    callbacks=[FastAI.Scheduler(Λ_reconstruction =>
+                                                  LinearWarmupSchedule(0., 1., 10)),
                               ])
 
   initial_lossval = loss(ŷs, ys)

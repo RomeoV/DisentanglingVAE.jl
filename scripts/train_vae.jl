@@ -6,7 +6,9 @@ import DisentanglingVAE: VAELoss
 import DisentanglingVAE: VisualizationCallback, LinearModelCallback, CSVLoggerBackend
 import DisentanglingVAE: Λ_kl, Λ_escape_penalty
 import DisentanglingVAE.LineData: make_data_sample
+import DisentanglingVAE: ExperimentConfig, parse_defaults
 
+import CUDA
 import FastAI, FastVision
 import Flux
 import Optimisers
@@ -26,13 +28,16 @@ import MLUtils
 import MLUtils.Transducers: ThreadedEx
 import BSON: @save, @load
 import Distributions: Normal
+import SimpleConfig: define_configuration
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 MLUtils._default_executor() = MLUtils.Transducers.ThreadedEx()
+CUDA.allowscalar(false)
 
 function main(; model_path=nothing)
     @info "Starting VAE training."
     experiment_config_defaults = parse_defaults(ExperimentConfig())
     cfg = define_configuration(ExperimentConfig, experiment_config_defaults)
+    rt_cfg = cfg.runtime_cfg
     # cfg = (; n_datapoints=2^14,
     #          batch_size=2^9,    )
 
@@ -56,10 +61,10 @@ function main(; model_path=nothing)
     # the number of steps per epoch stays the same :).
     # 2^14 -> 2^11
     # 2^7 -> 2^4
-    n_datapoints=(DRY ? cfg.n_datapoints÷(2^4) : cfg.n_datapoints)
+    n_datapoints=(DRY ? rt_cfg.n_datapoints÷(2^4) : rt_cfg.n_datapoints)
     data = mapobs(make_data_sample, 1:n_datapoints)
 
-    batch_size=(DRY ? cfg.batch_size÷(2^4) : cfg.batch_size)
+    batch_size=(DRY ? rt_cfg.batch_size÷(2^4) : rt_cfg.batch_size)
     dl, dl_val = taskdataloaders(data, task, batch_size, pctgval=0.1;
                                  #buffer=false, partial=false,
                                  # parallel=false, # false for debugging

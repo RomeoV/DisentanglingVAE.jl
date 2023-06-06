@@ -1,8 +1,9 @@
 import DisentanglingVAE
-using FastAI, FastVision
-import FastVision: RGB
-import FastVision: ImageTensor
-using Random: seed!, RandomDevice, TaskLocalRNG
+import FastAI
+import FastAI: SupervisedTask
+import FastVision
+import FastVision: RGB, Image, ProjectiveTransforms, ImagePreprocessing
+import Random: seed!, RandomDevice, TaskLocalRNG
 import Distributions: Distribution, Normal
 
 DisentanglingVAETask(;sz=(32, 32)) =
