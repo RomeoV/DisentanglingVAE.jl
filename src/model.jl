@@ -7,6 +7,7 @@ import Flux.Losses: logitbinarycrossentropy
 import FluxTraining
 import FastAI
 import FastAI: ToDevice, handle
+import Optimisers
 import Metalhead
 import LinearAlgebra: norm
 import Match: @match
@@ -20,22 +21,18 @@ Flux.@functor VAE
 VAE() = VAE(Chain(ResidualEncoder(128), DisentanglingVAE.bridge(128, 6)),
             ResidualDecoder(6))
 
-sample_latent(μ::AbstractArray{T}, logσ²::AbstractArray{T}) where {T} =
+sample_latent(μ::AbstractArray{T, 2}, logσ²::AbstractArray{T, 2}) where {T} =
        μ .+ exp.(logσ²./2) .* randn!(similar(logσ²))
 
-const AbstractImageTensor = AbstractArray{T, 4} where T
-function (vae::VAE)(x::AbstractImageTensor{T}) where T
+function (vae::VAE)(x::AbstractArray{T, 4}) where T
   μ, logσ², escape = vae.encoder(x)
   z = sample_latent(μ, logσ²)  # + escape
   x̄ = vae.decoder(z)
   return x̄, μ, logσ²
 end
 
-function (vae::VAE)((x_lhs, v_lhs, x_rhs, v_rhs, ks_c)::Tuple{<:AbstractImageTensor{T},
-                                                              <:AbstractMatrix{T},
-                                                              <:AbstractImageTensor{T},
-                                                              <:AbstractMatrix{T},
-                                                              <:AbstractMatrix{T}}) where T
+function (vae::VAE)((x_lhs, x_rhs)::Tuple{<:AbstractArray{T, 4},
+                                          <:AbstractArray{T, 4}}) where T
   return (vae(x_lhs)..., vae(x_rhs)...)
 end
 
@@ -59,27 +56,33 @@ struct VAETrainingPhase <: FluxTraining.AbstractTrainingPhase end
 struct VAEValidationPhase <: FluxTraining.AbstractValidationPhase end
 function FluxTraining.on(::FluxTraining.StepBegin, ::Union{VAETrainingPhase, VAEValidationPhase},
                          cb::ToDevice, learner)
-  learner.step.xs = cb.movedatafn.(learner.step.xs)
+  @assert objectid(learner.step.xs[1]) == objectid(learner.step.ys[1])
+  @assert objectid(learner.step.xs[2]) == objectid(learner.step.ys[3])
+
   learner.step.ys = cb.movedatafn.(learner.step.ys)
+  # we only want to move the data to gpu once.
+  learner.step.xs = (learner.step.ys[1], learner.step.ys[3])
 end
 
 function FluxTraining.step!(learner, phase::VAETrainingPhase, batch)
     xs, ys = batch
     FluxTraining.runstep(learner, phase, (; xs=xs, ys=ys)) do handle, state
         state.grads = FluxTraining._gradient(learner.optimizer, learner.model, learner.params) do model
-            x_lhs, v_lhs, x_rhs, v_rhs, ks_c = state.xs
+            x_lhs, x_rhs = state.xs
+            _x_lhs, v_lhs, _x_rhs, v_rhs, ks_c = state.ys
             μ_lhs, logσ²_lhs, escape_lhs = model.encoder(x_lhs)
             μ_rhs, logσ²_rhs, escape_rhs = model.encoder(x_rhs)
 
             # averaging mask with 1s for all style variables (which we always average)
-            ks_sc = let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
-                @ignore_derivatives vcat(ks_c, 1 .+ 0 .* similar(ks_c, sz))
+            ks_cs = @ignore_derivatives let sz = (size(μ_lhs, 1) - size(ks_c, 1), size(ks_c, 2))
+                ks_style = 1 .+ 0 .* similar(ks_c, sz)
+                vcat(ks_c, ks_style)
             end
 
-            μ̂_lhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_lhs)
-            μ̂_rhs     = ks_sc.*(μ_lhs+μ_rhs)./2         + (1 .- ks_sc).*(μ_rhs)
-            logσ̂²_lhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_lhs)
-            logσ̂²_rhs = ks_sc.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_sc).*(logσ²_rhs)
+            μ̂_lhs     = ks_cs.*(μ_lhs+μ_rhs)./2         + (1 .- ks_cs).*(μ_lhs)
+            μ̂_rhs     = ks_cs.*(μ_lhs+μ_rhs)./2         + (1 .- ks_cs).*(μ_rhs)
+            logσ̂²_lhs = ks_cs.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_cs).*(logσ²_lhs)
+            logσ̂²_rhs = ks_cs.*(logσ²_lhs+logσ²_rhs)./2 + (1 .- ks_cs).*(logσ²_rhs)
 
             z_lhs     = sample_latent(μ̂_lhs, logσ̂²_lhs)  # + escape_lhs
             z_rhs     = sample_latent(μ̂_rhs, logσ̂²_rhs)  # + escape_rhs
@@ -119,7 +122,7 @@ FluxTraining.step!(learner, phase::VAEValidationPhase, batch) =
 
 @testset "model step" for device in [Flux.cpu, Flux.gpu]
   model = VAE() |> device
-  learner = Learner(model, VAELoss{Float64}(); optimizer=Flux.Adam())
+  learner = Learner(model, VAELoss{Float64}(); optimizer=Optimisers.Adam())
 
   task = DisentanglingVAETask()
   x_, y_ = FastAI.mocksample(task)

@@ -6,14 +6,14 @@ import FastVision: ImageTensor
 using Random: seed!, RandomDevice, TaskLocalRNG
 import Distributions: Distribution, Normal
 
-DisentanglingVAETask(;sz=(32, 32)) = 
-    let tpl_in   = (Image{2}(), Continuous(6),                  # LHS: x, v,
-                    Image{2}(), Continuous(6),                  # RHS: x, v,
-                    Continuous(6)),                             # ks content
+DisentanglingVAETask(;sz=(32, 32)) =
+    let tpl_in   = (Image{2}(), Image{2}()),
         tpl_pred = (Image{2}(), Continuous(6), Continuous(6),   # LHS: x̄, μ, logσ²,
                     Image{2}(), Continuous(6), Continuous(6)),  # RHS: x̄, μ, logσ²
-        tpl_out  = (Image{2}(), Continuous(6),                  # LHS: x, v,
-                    Image{2}(), Continuous(6)),                 # RHS: x, v
+        tpl_out  = (Image{2}(), Continuous(6),                  # LHS: x, v
+                    Image{2}(), Continuous(6),                  # RHS: x, v
+                    Continuous(6))                              # ks content
+
         encodings = (ProjectiveTransforms(sz),
                      ImagePreprocessing(means=FastVision.SVector(0., 0., 0.),
                                         stds =FastVision.SVector(1., 1., 1.)))

@@ -72,19 +72,17 @@ LinearWarmupSchedule(startlr, initlr, warmup_steps=-1) =
            initlr => Inf)
 @testset "loss scheduling" begin
   T = Float32
-  xs = (rand(T, 32, 32, 3, 7), zeros(T, 6, 7),
-        rand(T, 32, 32, 3, 7), zeros(T, 6, 7),
-        zeros(T, 6, 7))
+  xs = (rand(T, 32, 32, 3, 7),
+        rand(T, 32, 32, 3, 7))
   ŷs = (rand(T, 32, 32, 3, 7), zeros(T, 6, 7), zeros(T, 6, 7),
-        rand(T, 32, 32, 3, 7), zeros(T, 6, 7), zeros(T, 6, 7))
+         rand(T, 32, 32, 3, 7), zeros(T, 6, 7), zeros(T, 6, 7))
   ys = (rand(T, 32, 32, 3, 7), ones(T, 6, 7),
-        rand(T, 32, 32, 3, 7), ones(T, 6, 7))
+        rand(T, 32, 32, 3, 7), ones(T, 6, 7),
+        zeros(T, 6, 7))
 
 
   local_reconstruction_loss(x_, x) = mean(x-x_)
-  loss = VAELoss{Float64}(
-      local_reconstruction_loss,
-      1., 0., 0., 0., 0., 0., 0.)
+  loss = VAELoss{Float64}(reconstruction_loss=local_reconstruction_loss)
 
   model = VAE()
   learner = Learner(model, loss; optimizer=Flux.Adam(),

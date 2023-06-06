@@ -56,8 +56,8 @@ function make_data_sample(D::Distribution, i::Int;
   draw!(img_rhs, v_rhs[3:4]..., RGB{Float32}(0,1.,0))
   draw!(img_rhs, v_rhs[5:6]..., RGB{Float32}(0,0,1.))
 
-  @ignore_derivatives ((img_lhs, v_lhs, img_rhs, v_rhs, float.(ks)),
-                       (img_lhs, v_lhs, img_rhs, v_rhs))
+  ((img_lhs, img_rhs),
+   (img_lhs, v_lhs, img_rhs, v_rhs, Float32.(ks)))
 end
 
 @testset "line data tests" begin
