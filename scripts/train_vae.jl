@@ -1,16 +1,17 @@
 # using Revise
 using DisentanglingVAE
 import DisentanglingVAE: make_experiment_path
-import DisentanglingVAE: backbone, bridge, ResidualDecoder, ResidualEncoder
 import DisentanglingVAE: VAELoss
 import DisentanglingVAE: VisualizationCallback, LinearModelCallback, CSVLoggerBackend
-import DisentanglingVAE: Λ_kl, Λ_escape_penalty
-import DisentanglingVAE.LineData: make_data_sample
 import DisentanglingVAE: ExperimentConfig, parse_defaults
+import DisentanglingVAE.VAELosses: Λ_kl, Λ_escape_penalty, LinearWarmupSchedule
+import DisentanglingVAE.VAEData: make_data_sample
+import DisentanglingVAE.VAECallbacks: ExpDirPrinterCallback
 
 import CUDA
 import FastAI, FastVision
 import Flux
+import Flux.Losses: logitbinarycrossentropy
 import Optimisers
 import FastAI: fitonecycle!, load, datarecipes
 import FastAI: savetaskmodel, loadtaskmodel
@@ -25,12 +26,14 @@ import Wandb: WandbBackend
 import FastVision: ShowText, RGB
 import ChainRulesCore: @ignore_derivatives
 import MLUtils
-import MLUtils.Transducers: ThreadedEx
 import BSON: @save, @load
 import Distributions: Normal
 import SimpleConfig: define_configuration
+
+import MLUtils.Transducers: ThreadedEx
 # ThreadPoolEx gave me problems, see https://github.com/JuliaML/MLUtils.jl/issues/142
 MLUtils._default_executor() = MLUtils.Transducers.ThreadedEx()
+
 CUDA.allowscalar(false)
 
 function main(; model_path=nothing)
@@ -43,7 +46,7 @@ function main(; model_path=nothing)
 
     EXP_PATH = make_experiment_path()
     # DRY -> solve much smaller problem, usually for local machine
-    DRY = (isdefined(Main, :DRY) ? DRY : occursin("Romeo", read(`hostname`, String)))
+    DRY = (isdefined(Main, :DRY) ? Main.DRY : occursin("Romeo", read(`hostname`, String)))
     DEVICE = gpu
 
     task = DisentanglingVAETask()
@@ -61,31 +64,35 @@ function main(; model_path=nothing)
     # the number of steps per epoch stays the same :).
     # 2^14 -> 2^11
     # 2^7 -> 2^4
-    n_datapoints=(DRY ? rt_cfg.n_datapoints÷(2^4) : rt_cfg.n_datapoints)
+    n_datapoints=(DRY ? rt_cfg.n_datapoints÷(2^3) : rt_cfg.n_datapoints)
     data = mapobs(make_data_sample, 1:n_datapoints)
 
-    batch_size=(DRY ? rt_cfg.batch_size÷(2^4) : rt_cfg.batch_size)
+    batch_size=(DRY ? rt_cfg.batch_size÷(2^3) : rt_cfg.batch_size)
     dl, dl_val = taskdataloaders(data, task, batch_size, pctgval=0.1;
-                                 #buffer=false, partial=false,
+                                 buffer=true, 
+                                 partial=false,
+                                 parallel=true,
                                  # parallel=false, # false for debugging
                                  );
 
     opt = Optimisers.OptimiserChain(Optimisers.ClipNorm(1f0),
                                     Optimisers.Adam(3e-4))
-    tb_backend = TensorBoardBackend(EXP_PATH)
-    wandb_backend = WandbBackend(; project="DisentanglingVAE", entity="romeov")
-    csv_backend = CSVLoggerBackend(EXP_PATH, 6)
+    logging_backends = [
+        TensorBoardBackend(EXP_PATH),
+        # wandb_backend = WandbBackend(; project="DisentanglingVAE", entity="romeov"),
+        CSVLoggerBackend(EXP_PATH, 6),
+    ]
     learner = FastAI.Learner(model, loss;
                     optimizer=opt,
                     data=(dl, dl_val),
                     callbacks=[FastAI.ToGPU(),
                                FastAI.ProgressPrinter(),
                                VisualizationCallback(task=task, device=gpu),
-                               LinearModelCallback(gpu, ),
-                               LogMetrics((tb_backend, csv_backend, wandb_backend)),
+                               # LinearModelCallback(gpu, ),
+                               # LogMetrics(logging_backends...),
                                ExpDirPrinterCallback(EXP_PATH),
-                               Checkpointer(EXP_PATH),
-                               loss_scheduler,
+                               # Checkpointer(EXP_PATH),
+                               # loss_scheduler,
                               ])
 
     # test one input
@@ -99,8 +106,8 @@ function main(; model_path=nothing)
     #                          VAEValidationPhase() => dl_val))
     # end
     # close(wandb_backend)
-    model_cpu = cpu(model);
-    @save joinpath(EXP_PATH, "model_ep_$n_epochs.bson") model_cpu
-    savetaskmodel(joinpath(EXP_PATH, "model_ep_$n_epochs.jld2"), task, learner.model)
+    # model_cpu = cpu(model);
+    # @save joinpath(EXP_PATH, "model_ep_$n_epochs.bson") model_cpu
+    # savetaskmodel(joinpath(EXP_PATH, "model_ep_$n_epochs.jld2"), task, learner.model)
     #####################################################
 end

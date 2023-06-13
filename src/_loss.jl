@@ -1,14 +1,15 @@
-using InlineTest
-using Configurations
+import Configurations
+import Configurations: @option
 import Flux
 import FluxTraining
 import FluxTraining: HyperParameter
-import Optimisers
 import ParameterSchedulers: Triangle, Sequence, Shifted
 import FastAI: Scheduler, Learner
+import StatsBase: mean
+import Flux.Losses: logitbinarycrossentropy
 
-const reconstruction_loss = Flux.Losses.logitbinarycrossentropy  # "Bernoulli loss"
-const kl_divergence(μ, logσ²; agg=mean) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) |> agg
+reconstruction_loss = logitbinarycrossentropy  # "Bernoulli loss"
+kl_divergence(μ, logσ²; agg=mean) = sum(@. ((μ^2 + exp(logσ²) - 1 - logσ²) / 2); dims=1) |> agg
 
 @option mutable struct VAELoss{T}
   const reconstruction_loss::Function = reconstruction_loss
@@ -45,7 +46,7 @@ abstract type Λ_covariance <: LossParam end
 abstract type Λ_directionality <: LossParam end
 abstract type Λ_direct_supervision <: LossParam end
 abstract type Λ_escape_penalty <: LossParam end
-FluxTraining.stateaccess(::Type{<:LossParam}) = (lossfn = Write(), )
+FluxTraining.stateaccess(::Type{<:LossParam}) = (lossfn = FluxTraining.Write(), )
 FluxTraining.sethyperparameter!(learner, t::Type{<:LossParam}, val) = begin
   let sym = string(t) |> str->split(str, '.')[end] |> lowercase |> Symbol
     setfield!(learner.lossfn, sym, val)
@@ -73,6 +74,7 @@ LinearWarmupSchedule(startlr, initlr, warmup_steps=-1) =
   Sequence(Triangle(λ0 = startlr, λ1 = initlr, period = 2 * warmup_steps) => warmup_steps,
            initlr => Inf)
 @testset "loss scheduling" begin
+  import Optimisers
   T = Float32
   xs = (rand(T, 32, 32, 3, 7),
         rand(T, 32, 32, 3, 7))
@@ -88,7 +90,7 @@ LinearWarmupSchedule(startlr, initlr, warmup_steps=-1) =
 
   model = VAE()
   learner = Learner(model, loss; optimizer=Optimisers.Adam(),
-                    callbacks=[FastAI.Scheduler(Λ_reconstruction =>
+                    callbacks=[Scheduler(Λ_reconstruction =>
                                                   LinearWarmupSchedule(0., 1., 10)),
                               ])
 

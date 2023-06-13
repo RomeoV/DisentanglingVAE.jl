@@ -1,78 +1,45 @@
 module DisentanglingVAE
 # include("line_utils.jl")
-include("flux_patches.jl")
-include("fastai_patches.jl")
-include("data.jl")
-include("losses.jl")
-include("loss.jl")
+using Reexport
+include("VAEUtils/VAEUtils.jl")
+@reexport using .VAEUtils
+include("VAELosses/VAELosses.jl")
+@reexport using .VAELosses
+include("VAEData/VAEData.jl")
+@reexport using .VAEData
+include("VAETraining/VAETraining.jl")
+@reexport using .VAETraining
+include("VAECallbacks/VAECallbacks.jl")
+@reexport using .VAECallbacks
+include("VAEModels/VAEModels.jl")
+@reexport using .VAEModels
+import ReTest: @testset, @test
 include("config.jl")
-include("layers.jl")
-include("residual_models.jl")
-include("model.jl")
-include("task.jl")
-include("callbacks.jl")
 include("experiment_utils.jl")
-include("uncertainty_quantification.jl")
 
-export DisentanglingVAETask, VAE, ELBO
+export DisentanglingVAETask, VAE, VAELoss
 export VAETrainingPhase, VAEValidationPhase
 export VisualizationCallback, LinearModelCallback, ExpDirPrinterCallback
-export ResidualBlock, ResidualEncoder, ResidualDecoder
 export LinearWarmupSchedule
-import CUDA
-
-
-# import Flux
-# import FastVision
-# import FastAI: mapobs, taskdataloaders, Learner, fit!
-# using PrecompileTools
-
-# @setup_workload begin
-#   DRY = true
-#   @compile_workload begin
-#       ((cifar10_x, cifar10_y), blocks) = load(datarecipes()["cifar10"])
-#       make_data_sample_(i::Int) = make_data_sample(Normal, i; x0_fn = i->1//2*cifar10_x[(i % 15_000)+1])  # 15_000 airplanes
-#       data = mapobs(make_data_sample_, 1:75)
-#       task = DisentanglingVAETask()
-
-#       dl, dl_val = taskdataloaders(data, task, 32, pctgval=0.1;
-#                                    buffer=false, partial=false,
-#                                   );
-#       model = VAE(ResidualEncoder(128), bridge(128, 12),
-#                   ResidualDecoder(12), gpu);
-#       learner = Learner(model, ELBO;
-#                         optimizer=Flux.Adam(3e-4),
-#                         data=(dl, dl_val))
-#       fit!(learner, 1)
-#   end
-# end
+export kl_divergence
+export make_experiment_path
 
 greet() = print("Hello World!")
 
-import PrecompileTools
-@PrecompileTools.compile_workload begin
-  import DisentanglingVAE.LineData: make_data_sample
-  _data = make_data_sample(1)
-
-  task = DisentanglingVAETask()
-  x_, y_ = FastAI.mocksample(task)
-  x = FastAI.encodeinput(task, FastAI.Training(), x_)
-  y = FastAI.encodetarget(task, FastAI.Training(), y_)
-  xs = batch([x, x])
-  ys = batch([y, y])
-
-  # model = VAE()
-  # loss = VAELoss{Float64}()
-  # ŷs = model(xs)
-  # lossval = loss(ŷs, ys)
-  # learner = Learner(model, loss; optimizer=Flux.Adam(),
-  #                   callbacks=[
-  #                     Scheduler(Λ_reconstruction =>
-  #                               LinearWarmupSchedule(0., 1., 10)),
-  #                             ])
-  # for i in 1:5
-  #   FluxTraining.step!(learner, VAETrainingPhase(), (xs, ys))
-  # end
-end
+# import PrecompileTools, FastAI, Optimisers
+# PrecompileTools.@compile_workload begin
+#     model = VAE()
+#     task = DisentanglingVAETask()
+#     data = FastAI.mapobs(make_data_sample, 1:16)
+#     dl, dl_val = FastAI.taskdataloaders(data, task, 4, pctgval=0.25;
+#                                  partial=false,
+#                                  # buffer=false,
+#                                  # parallel=false, # false for debugging
+#                                  );
+#     learner = FastAI.Learner(model, VAELoss{Float64}();
+#                     optimizer=Optimisers.Adam(),
+#                     data=(dl, dl_val))
+#     FastAI.fit!(learner, 1)
+# end
 
 end # module DisentanglingVAE
