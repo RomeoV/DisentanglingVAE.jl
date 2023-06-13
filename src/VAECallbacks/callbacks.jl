@@ -1,0 +1,183 @@
+import FastAI
+import FastAI: ShowText
+import FluxTraining
+import FluxTraining: Read, Write, Loggables, Metrics, _combinename
+import GLM
+using EllipsisNotation
+import ChainRulesCore: @ignore_derivatives
+import OrderedCollections: OrderedDict
+import Flux: cpu, gpu
+import FluxTraining: LoggerBackend
+import CSV
+import DataFrames
+import DataFrames: DataFrame, nrow
+import MLUtils: unbatch
+
+# Otherwise we get some TTY error.
+# FastAI.default_showbackend() = ShowText()
+
+@kwdef struct VisualizationCallback <: FluxTraining.Callback 
+  task
+  device
+  backend=ShowText(stdout)
+end
+
+function FluxTraining.on(
+                ::FluxTraining.EpochEnd,
+                ::FluxTraining.Phases.AbstractValidationPhase,
+                cb::VisualizationCallback,
+                learner)
+    xs, ys = first(learner.data[:validation])
+    ŷs = learner.model(xs[1] |> cb.device) .|> Flux.sigmoid |> cpu;
+    xs_, ys_, ŷs_ = unbatch.((xs[1], ys[1], ŷs[1]))
+    FastAI.showblockinterpretable(cb.backend,
+                                  cb.task.encodings,
+                                  (cb.task.blocks.y[1], cb.task.blocks.ŷ[1]),
+                                  (ys_[1], ŷs_[1]))
+end
+FluxTraining.stateaccess(::VisualizationCallback) = (data=FluxTraining.Read(), 
+                                                     model=FluxTraining.Read(), )
+FluxTraining.runafter(::VisualizationCallback) = (Metrics,)
+
+
+struct LinearModelCallback <: FluxTraining.Callback
+    device
+end
+
+function FluxTraining.on(
+                ::FluxTraining.EpochEnd,
+                phase::FluxTraining.Phases.AbstractTrainingPhase,
+                cb::LinearModelCallback,
+                learner)
+    epoch = learner.cbstate.history[phase].epochs
+    if epoch % 10 == 0
+        eval_lin_callback_with_data(phase, cb, learner, :training)
+    end
+end
+function FluxTraining.on(
+                ::FluxTraining.EpochEnd,
+                phase::FluxTraining.Phases.AbstractValidationPhase,
+                cb::LinearModelCallback,
+                learner)
+    epoch = learner.cbstate.history[phase].epochs
+    if epoch % 10 != 0
+        eval_lin_callback_with_data(phase, cb, learner, :validation)
+    end
+end
+function eval_lin_callback_with_data(
+        phase::Union{FluxTraining.Phases.AbstractTrainingPhase,
+                     FluxTraining.Phases.AbstractValidationPhase},
+        cb::LinearModelCallback,
+        learner,
+        dset_symbol
+    )
+    encoder, bridge = learner.model.encoder, learner.model.bridge
+
+    # collect data
+    # after combining batches, the final result will be in nobs x npredictors
+    predictors    = Array{Float64, 2}[];
+    labels        = Array{Float64, 2}[];
+    uncertainties = Array{Float64, 2}[];
+    for (xs, ys, _, _, _) in learner.data[dset_symbol]
+        μs, logσ²s = @ignore_derivatives (bridge ∘ encoder)(xs |> cb.device) .|> cpu
+        push!(predictors, μs')
+        push!(uncertainties, exp.(logσ²s./2)')
+        push!(labels, ys')
+    end
+    predictors = let predictors = vcat(predictors...)
+        hcat(predictors, ones(size(predictors, 1)))  # we add a bias here
+    end
+    labels        = vcat(labels...)
+    uncertainties = vcat(uncertainties...)
+
+    # linear model
+    models = OrderedDict(
+        i => GLM.lm(predictors, ys)
+        for (i, ys) in enumerate(eachslice(labels, dims=2))
+    )
+    # print pvals
+    p_vals(i) = GLM.coeftable(models[i]).cols[4]
+    println("p values (bias last)")
+    display(cat([p_vals(i)'.|> x->round(x; sigdigits=3)
+                 for i in keys(models)]..., dims=1))
+
+    # Log "correct" p value and next highest confidence one as metric value
+    # In a graph we should see that the correct value goes to zero
+    # and the next highest one goes up
+    epoch = learner.cbstate.history[phase].epochs
+    metricsepoch = learner.cbstate.metricsepoch[phase]
+    for (i, model) in models
+        p_vals = GLM.coeftable(model).cols[4]
+        p_ast  = p_vals[i]  # p value of correct predictor
+        p_next = let idx = filter(∉([1, i]), eachindex(p_vals))
+            minimum(p_vals[idx])  # next "highest confidence" p value
+        end
+        push!(metricsepoch, Symbol("p$(i)*"), epoch, p_ast)
+        push!(metricsepoch, Symbol("p$(i)_"), epoch, p_next)
+    end
+
+    ## UNCERTAINTY QUANTIFICATION
+    # This is hacky, but I want to reuse the computed predictors also for the uncertainty quantification.
+    # Probably the better way would be to store the predictors once in another callback state, and then use them from another callback.
+    # Maybe tomorrow ;)
+    for (i, (μs, σs, ys)) in enumerate(zip(eachslice(predictors,    dims=2),
+                                           eachslice(uncertainties, dims=2),
+                                           eachslice(labels,        dims=2)))
+        # rescale latent predictors according to linear model
+        μs .+= GLM.coef(models[i])[end]
+        σs .*= abs.(GLM.coef(models[i])[i])
+        c_min, c_max, c_mean = compute_calibration_metric(
+            Normal.(μs, σs), ys
+        )
+        push!(metricsepoch, Symbol("c$(i)_min"),  epoch, c_min)
+        push!(metricsepoch, Symbol("c$(i)_max"),  epoch, c_max)
+        push!(metricsepoch, Symbol("c$(i)_mean"), epoch, c_mean)
+
+        dispersion = compute_dispersion(
+            Normal.(μs, σs), ys
+        )
+        push!(metricsepoch, Symbol("d$(i)"), epoch, dispersion)
+    end
+end
+FluxTraining.stateaccess(::LinearModelCallback) = (data=Read(),
+                                                   model=Read(),
+                                                   cbstate=(metricsepoch=Write(), history=Read()),)
+FluxTraining.runafter(::LinearModelCallback) = (VisualizationCallback, Metrics, )
+
+ExpDirPrinterCallback(path) =
+    FluxTraining.CustomCallback((learner)->println(path),
+                                FluxTraining.EpochBegin,
+                                FluxTraining.AbstractTrainingPhase)
+
+struct CSVLoggerBackend <: LoggerBackend
+    logdir :: String
+    df :: DataFrames.DataFrame
+    function CSVLoggerBackend(logdir, n_vars)
+        names = [["Loss"];
+                 ["p$(i)*"     for i in 1:n_vars];  # linear model p-value of true predictor
+                 ["p$(i)_"     for i in 1:n_vars];  # minimum linear model p-value of false predictors
+                 ["c$(i)_min"  for i in 1:n_vars];  # minimum calibration error
+                 ["c$(i)_max"  for i in 1:n_vars];  # maximum calibration error
+                 ["c$(i)_mean" for i in 1:n_vars];  # mean calibration error
+                 ["d$(i)"      for i in 1:n_vars]]  # dispersion
+        arrs = fill(Float64[], length(names))
+        df = DataFrame(arrs, names)
+        new(logdir, df)
+    end
+end
+
+Base.show(io::IO, backend::CSVLoggerBackend) = print(
+    io, "CSVLoggerBackend(", backend.logdir, ")")
+
+function FluxTraining.log_to(backend::CSVLoggerBackend, value::Loggables.Value, name, i; group = ())
+    # only log on epoch
+    if get(group, 1, nothing) == "Step"
+        return
+    end
+    if nrow(backend.df) < i
+        push!(backend.df, fill(NaN, length(names(backend.df))))
+    end
+
+    backend.df[i, name] = value.data
+    CSV.write(joinpath(backend.logdir, "log.csv"), backend.df)
+end

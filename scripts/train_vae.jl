@@ -91,7 +91,7 @@ function main(; model_path=nothing)
                                # LogMetrics(logging_backends...),
                                ExpDirPrinterCallback(EXP_PATH),
                                # Checkpointer(EXP_PATH),
-                               # loss_scheduler,
+                               loss_scheduler,
                               ])
 
     # test one input
