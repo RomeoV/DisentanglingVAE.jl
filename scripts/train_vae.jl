@@ -71,8 +71,7 @@ function main(; model_path=nothing)
     dl, dl_val = taskdataloaders(data, task, batch_size, pctgval=0.1;
                                  buffer=true, 
                                  partial=false,
-                                 parallel=true,
-                                 # parallel=false, # false for debugging
+                                 parallel=true, # false for debugging
                                  );
 
     opt = Optimisers.OptimiserChain(Optimisers.ClipNorm(1f0),
