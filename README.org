@@ -1,0 +1,87 @@
+#+title: DisentanglingVAE.jl: Achieving Human-Interpretable Disentangled Representations And Concept-Based Uncertainties Through Weak Labels
+#+author: Romeo Valentin
+#+email: romeov@stanford.edu
+
+#+begin_quote
+*Abstract:* The demand for certification processes of deep learning models is ever growing, especially in safety-critical applications like civilian transport or medical.
+Typically, such discussion involves out-of-distribution detection and uncertainty quantification.
+However, we argue that it is generally difficult to reason about such methods in the high-dimensional spaces neural networks operate in.
+To illustrate, consider a computer vision task in a driving-setting.
+Indeed, humans can typically describe such images using a set of low-dimensional features, and separate "unimportant" background and "important" foreground features.
+However, the meaning of uncertainty and out-of-distribution may change depending on the model and the downstream task.
+In order to verify correct and robust reasoning of a model, we therefore argue for the need of "disentangled representations" for intermediate and final activations within the model.
+More precisely, this entails statistically independent mechanisms and activation patterns that coincide with human-interpretable features.
+Although building such representations in a fully unsupervised way has been proven to be impossible, we follow several promising approaches using simple features and low amounts of supervision.
+We argue that achieving success with these models could mark a significant step towards creating certifiable models.
+#+end_quote
+
+*** TLDR: Disentangling VAE
+**** Problem:​
+Regulation in safety-critical context is hard 🛬.
+- How to reason about inner workings?
+- Correct causal directions?
+- Generalization / OOD performance?
+- What is OOD?
+- How to aggregate uncertainty?​
+
+**** Key Insights:​
+- detect "OOD" and uncertainty for many concepts​
+- understand requirements for semi-supervised disentanglement​
+- later: regulation on "symbolic" level​
+
+**** Approach: ​
+- VAE + contrastive loss ➡ disentanglement​
+- uncertainty directly from representation​
+- OOD by aggregating detection of concepts​
+
+- Idea ::
+  - Separate data in to /content/ and /style/
+  - Learn to disentangle content through "anti-contrastive loss"
+- VAE ::
+  - Encoder $\hat{z} = f(x)$ & Decoder $\tilde{x} = g(\hat{z})$
+
+*** The model setup
+#+attr_org: :width 400
+#+attr_latex: :width 0.8\textwidth
+#+attr_html: :width 400
+[[file:./figs/assumptions-flow.png]]
+
+*** Loss setup
+/Inspired by Locatello et al. 2020 "Weakly-supervised disentanglement without compromises."/
+Image pairs varying in known concepts are presented, but without any labels. Embeddings are mixed in the concept dimension. Typical VAE loss is computed.
+#+attr_org: :width 400
+[[file:./figs/disentanglement-loss.png]]
+
+*** Varying style and content independently
+| Content (viewing angle)       | Style (time of day, runway type) |
+|-------------------------------+----------------------------------|
+| [[file:./figs/airstrip_imgs.png]] | [[file:./figs/airstrip_imgs2.png]] |
+
+** Related considerations: Is "OOD" a misnomer?
+Typically, OOD is very hard to define. For example, consider the following cases:
+*** Given a dataset of bird images, are the following cases OOD?
+|--------------------------------+----------------------------|
+| normal bird                    | ID                         |
+| a car, no bird                 | OOD                        |
+| a bird & a ball in the corner  | technically OOD            |
+| bird with new color            | distributional shift (OOD) |
+| many birds                     | ??                         |
+| an obstructed bird             | ??                         |
+| a bird, but model does poorly  | ??                         |
+| an adversarial attack?         | ID but not iid             |
+
+*** Some OOD definitions to consider
+1) Implicit "Distribution" $\mathcal{D}$ from data $D$ \\
+=> check whether $P(x \mid \mathcal{D}) > \epsilon$, or
+$ x \sim \mathcal{D} $ "reasonably large".
+2) Given a (natural language) description and a sample, ask 100 people if description fits.
+3) Define a set of "concepts" by hand, and evaluate whether sample contains them.
+4) Distribution that model performs well on and captures important concepts.
+
+*** OOD using a concept based approach
+[[file:./figs/concept-bottleneck-model.png]]
+(taken from Koh et al. 2020, “Concept Bottleneck Models.”)
+
+New definition of OOD using concept based approach:
++ ID: :: All relevant concepts are present and uniquely distinguishable.
++ OOD: :: Some relevant concepts are missing or ambiguous.
